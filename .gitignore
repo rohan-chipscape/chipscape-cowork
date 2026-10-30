@@ -33,6 +33,9 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# local token store (Google OAuth refresh tokens, etc.)
+.data/
+
 # vercel
 .vercel
 

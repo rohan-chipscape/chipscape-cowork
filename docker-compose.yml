@@ -1,0 +1,13 @@
+services:
+  cowork:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.local
+    volumes:
+      - cowork-data:/app/.data # persists the Google OAuth token across restarts
+
+volumes:
+  cowork-data:
