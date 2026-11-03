@@ -8,6 +8,7 @@ const TOOL_LABELS: Record<string, string> = {
   web_search: "Search the web",
   web_fetch: "Fetch a web page",
   run_js: "Run JavaScript",
+  create_document: "Create a document",
   gmail_search: "Search Gmail",
   gmail_read: "Read a Gmail message",
   gmail_send: "Send an email",
@@ -148,6 +149,21 @@ function EventPreview({
   );
 }
 
+function DocumentPreview({ filename, downloadUrl }: { filename: string; downloadUrl: string }) {
+  return (
+    <a
+      href={downloadUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-3 rounded-lg border border-white/10 bg-[#1f1f1f] p-3 text-sm hover:bg-[#262626]"
+    >
+      <span className="text-xl">📄</span>
+      <span className="flex-1 text-neutral-200">{filename}</span>
+      <span className="text-xs text-[#5b9bff]">Download</span>
+    </a>
+  );
+}
+
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     pending: "bg-amber-900/40 text-amber-300",
@@ -215,10 +231,19 @@ export function AgentTurnView({
               {prettyArgs(step.name, step.args)}
             </pre>
           )}
-          {step.result && (
-            <p className="mt-2 whitespace-pre-wrap break-words text-xs text-neutral-500">
-              {step.result}
-            </p>
+          {step.name === "create_document" && step.result && safeParse(step.result)?.download_url ? (
+            <div className="mt-2">
+              <DocumentPreview
+                filename={safeParse(step.result).filename}
+                downloadUrl={safeParse(step.result).download_url}
+              />
+            </div>
+          ) : (
+            step.result && (
+              <p className="mt-2 whitespace-pre-wrap break-words text-xs text-neutral-500">
+                {step.result}
+              </p>
+            )
           )}
         </div>
         );

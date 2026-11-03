@@ -73,9 +73,11 @@ export async function classifyIntent(
         content:
           "Classify the user's message as exactly one word: AGENT or DEBATE.\n" +
           "AGENT: the request needs current/real-time information, searching or reading a web page, " +
-          "running a calculation/code, or taking some action.\n" +
+          "running a calculation/code, taking some action, or creating/writing/drafting a document, " +
+          "report, memo, or PDF file to hand back.\n" +
           "DEBATE: the request is a question, opinion, analysis, or advice that can be answered from " +
-          "general knowledge and reasoning alone, with no need to search, fetch, or compute.\n" +
+          "general knowledge and reasoning alone, with no need to search, fetch, compute, or produce a " +
+          "downloadable file.\n" +
           "Reply with only one word: AGENT or DEBATE.",
       },
       { role: "user", content: question },

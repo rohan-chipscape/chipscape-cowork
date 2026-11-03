@@ -6,6 +6,10 @@ export function proxy(req: NextRequest) {
   if (
     pathname.startsWith("/login") ||
     pathname.startsWith("/api/login") ||
+    // Download links use an unguessable UUID as the access control (like a
+    // Drive "anyone with the link" share) so they work from a system browser
+    // or another device without a session cookie.
+    pathname.startsWith("/api/files/download/") ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico"
   ) {

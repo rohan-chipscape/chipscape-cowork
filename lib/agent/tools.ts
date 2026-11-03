@@ -13,6 +13,7 @@ import {
 } from "@/lib/tools/google";
 import { listConnectedAccounts } from "@/lib/google/accountStore";
 import { buildMemoryBlock } from "@/lib/memory/context";
+import { createPdfDocument } from "@/lib/files/generateDocument";
 
 const BASE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
   {
@@ -50,6 +51,25 @@ const BASE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
         type: "object",
         properties: { code: { type: "string" } },
         required: ["code"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_document",
+      description:
+        "Create a downloadable PDF document — use this whenever the user asks you to write, generate, " +
+        "draft, or give them a document, report, memo, or PDF, instead of just replying with the content " +
+        "as a chat message. Supports simple formatting in `content`: lines starting with '# ' or '## ' " +
+        "become headings, and lines starting with '- ' become bullet points.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Short document title, also used as the filename." },
+          content: { type: "string", description: "The full body of the document." },
+        },
+        required: ["title", "content"],
       },
     },
   },
@@ -197,6 +217,15 @@ export async function executeTool(name: string, args: Record<string, unknown>) {
       return webFetch(String(args.url ?? ""));
     case "run_js":
       return runJs(String(args.code ?? ""));
+    case "create_document": {
+      const title = String(args.title ?? "Document");
+      const { id, filename } = await createPdfDocument(title, String(args.content ?? ""));
+      return {
+        id,
+        filename,
+        download_url: `/api/files/download/${id}/${encodeURIComponent(filename)}`,
+      };
+    }
     case "gmail_search":
       return gmailSearch(account, String(args.query ?? ""));
     case "gmail_read":
@@ -241,13 +270,15 @@ export function getAgentSystemPrompt(): string {
 
   return (
     "You are an agentic assistant working directly for a CEO. You can call tools to search the web, " +
-    "fetch specific pages, run short JavaScript calculations, and — when connected — search/read/send " +
-    `Gmail, list/create Google Calendar events, and search/read Google Drive files. ${accountsNote} ` +
+    "fetch specific pages, run short JavaScript calculations, create a downloadable PDF document, and — " +
+    `when connected — search/read/send Gmail, list/create Google Calendar events, and search/read Google ` +
+    `Drive files. ${accountsNote} ` +
     "Every tool call is shown to the CEO for approval before it runs, and you will see the result (or a " +
     "note that it was denied) afterward. Use tools only when they're actually needed to answer accurately " +
     "or complete the task — for a question you can answer directly from your own knowledge, just answer " +
-    "directly without calling a tool. Be concise, direct, and decision-useful. When you're done, give one " +
-    "clear final answer." +
+    "directly without calling a tool. If the CEO asks you to write, draft, or give them a document, report, " +
+    "memo, or PDF, always use create_document rather than just putting the content in a chat reply. Be " +
+    "concise, direct, and decision-useful. When you're done, give one clear final answer." +
     buildMemoryBlock()
   );
 }
