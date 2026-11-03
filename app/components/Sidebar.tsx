@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import type { ConversationSummary } from "@/lib/conversations/types";
 import { SidebarIcon, NewChatIcon, TrashIcon } from "./icons";
 
@@ -12,6 +13,7 @@ export function Sidebar({
   onSelect,
   onDelete,
   userName,
+  onLogout,
 }: {
   collapsed: boolean;
   onToggleCollapsed: () => void;
@@ -21,9 +23,22 @@ export function Sidebar({
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
   userName: string;
+  onLogout: () => void;
 }) {
   const displayName = userName.trim() || "Guest";
   const initial = displayName[0]?.toUpperCase() ?? "G";
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
 
   if (collapsed) {
     return (
@@ -107,11 +122,29 @@ export function Sidebar({
         </div>
       </div>
 
-      <div className="flex items-center gap-2.5 border-t border-white/10 px-4 py-3">
-        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-600 text-xs font-semibold text-white">
-          {initial}
-        </div>
-        <span className="truncate text-sm text-neutral-300">{displayName}</span>
+      <div ref={menuRef} className="relative border-t border-white/10">
+        <button
+          onClick={() => setMenuOpen((o) => !o)}
+          className="flex w-full items-center gap-2.5 px-4 py-3 text-left hover:bg-white/5"
+        >
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-600 text-xs font-semibold text-white">
+            {initial}
+          </div>
+          <span className="truncate text-sm text-neutral-300">{displayName}</span>
+        </button>
+        {menuOpen && (
+          <div className="absolute bottom-full left-2 right-2 mb-1 overflow-hidden rounded-lg bg-[#2f2f2f] shadow-xl">
+            <button
+              onClick={() => {
+                setMenuOpen(false);
+                onLogout();
+              }}
+              className="block w-full px-3 py-2.5 text-left text-sm text-neutral-200 hover:bg-white/10"
+            >
+              Log out
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

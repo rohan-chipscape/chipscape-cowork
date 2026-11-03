@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useDebateChat, type HistoryMessage } from "@/lib/useDebateChat";
 import { useAgentChat } from "@/lib/useAgentChat";
 import { useConversations } from "@/lib/useConversations";
@@ -21,6 +22,7 @@ import {
 type OrderEntry = { kind: "debate" | "agent"; id: string };
 
 export default function Home() {
+  const router = useRouter();
   const debate = useDebateChat();
   const agent = useAgentChat();
   const convos = useConversations();
@@ -107,6 +109,17 @@ export default function Home() {
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     stickToBottom.current = distanceFromBottom < 120;
+  }
+
+  async function handleLogout() {
+    await fetch("/api/logout", { method: "POST" }).catch(() => {});
+    try {
+      localStorage.removeItem("cowork_user_name");
+    } catch {
+      // localStorage unavailable — not critical, the session cookie is what matters
+    }
+    router.push("/login");
+    router.refresh();
   }
 
   function startNewChat() {
@@ -273,6 +286,7 @@ export default function Home() {
         onSelect={openChat}
         onDelete={deleteChat}
         userName={userName}
+        onLogout={handleLogout}
       />
 
       <div className="flex flex-1 flex-col">
