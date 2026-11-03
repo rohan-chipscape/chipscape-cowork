@@ -35,6 +35,17 @@ function resultPage(message: string, ok: boolean) {
 const NATIVE_CONNECT_SCHEME = "chipscapecowork://google-connected";
 const NATIVE_LOGIN_SCHEME = "chipscapecowork://google-login";
 
+// Response.redirect(new URL(path, req.url)) looked right locally, but behind
+// nginx in production req.url resolves to the server's own internal bind
+// address (0.0.0.0:3000) rather than the public domain — sending the
+// browser to an address nobody else can reach. A bare relative path in the
+// Location header sidesteps that entirely: the browser resolves it against
+// the actual public URL it's already on, exactly like proxy.ts's own
+// (working) "/login" redirect.
+function redirectTo(path: string, status = 302) {
+  return new Response(null, { status, headers: { Location: path } });
+}
+
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
@@ -50,9 +61,7 @@ export async function GET(req: Request) {
       return Response.redirect(`${scheme}?ok=0&message=${encodeURIComponent(error)}`);
     }
     if (isWebLogin) {
-      return Response.redirect(
-        new URL(`/login?error=${encodeURIComponent(error)}`, req.url)
-      );
+      return redirectTo(`/login?error=${encodeURIComponent(error)}`);
     }
     return new Response(
       resultPage(`Google sign-in was cancelled or denied: ${error}`, false),
@@ -65,7 +74,7 @@ export async function GET(req: Request) {
       return Response.redirect(`${scheme}?ok=0&message=${encodeURIComponent(message)}`);
     }
     if (isWebLogin) {
-      return Response.redirect(new URL(`/login?error=${encodeURIComponent(message)}`, req.url));
+      return redirectTo(`/login?error=${encodeURIComponent(message)}`);
     }
     return new Response(resultPage(message, false), {
       status: 400,
@@ -106,7 +115,7 @@ export async function GET(req: Request) {
       // Response.redirect() returns a response with immutable headers, so
       // the Set-Cookie headers have to be built into a fresh Response instead
       // of appended afterward.
-      const headers = new Headers({ Location: new URL("/", req.url).toString() });
+      const headers = new Headers({ Location: "/" });
       headers.append(
         "Set-Cookie",
         `cowork_auth=${sessionSecret}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 30}`
@@ -136,7 +145,7 @@ export async function GET(req: Request) {
       return Response.redirect(`${scheme}?ok=0&message=${encodeURIComponent(message)}`);
     }
     if (isWebLogin) {
-      return Response.redirect(new URL(`/login?error=${encodeURIComponent(message)}`, req.url));
+      return redirectTo(`/login?error=${encodeURIComponent(message)}`);
     }
     return new Response(
       resultPage(`Failed to connect Google account: ${message}`, false),
