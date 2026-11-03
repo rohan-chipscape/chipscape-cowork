@@ -43,6 +43,10 @@ export type Conversation = {
   updatedAt: string;
   order: { kind: "debate" | "agent"; id: string }[];
   turns: StoredTurn[];
+  // The Google account that created this chat — scopes chat history per
+  // signed-in account, same as ChatGPT. Optional only because conversations
+  // created before this field existed don't have it (see LEGACY_OWNER).
+  ownerEmail?: string;
 };
 
 export type ConversationSummary = {
