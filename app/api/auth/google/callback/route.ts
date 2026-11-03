@@ -32,18 +32,31 @@ function resultPage(message: string, ok: boolean) {
 </html>`;
 }
 
+const NATIVE_SCHEME = "chipscapecowork://google-connected";
+
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
   const error = url.searchParams.get("error");
+  const isNative = url.searchParams.get("state") === "native";
 
   if (error) {
+    if (isNative) {
+      return Response.redirect(
+        `${NATIVE_SCHEME}?ok=0&message=${encodeURIComponent(error)}`
+      );
+    }
     return new Response(
       resultPage(`Google sign-in was cancelled or denied: ${error}`, false),
       { status: 400, headers: { "Content-Type": "text/html" } }
     );
   }
   if (!code) {
+    if (isNative) {
+      return Response.redirect(
+        `${NATIVE_SCHEME}?ok=0&message=${encodeURIComponent("Missing authorization code.")}`
+      );
+    }
     return new Response(resultPage("Missing authorization code.", false), {
       status: 400,
       headers: { "Content-Type": "text/html" },
@@ -56,15 +69,23 @@ export async function GET(req: Request) {
     const email = await getEmailForTokens(tokens);
     saveAccountTokens(email, tokens);
 
+    if (isNative) {
+      return Response.redirect(
+        `${NATIVE_SCHEME}?ok=1&email=${encodeURIComponent(email)}`
+      );
+    }
     return new Response(resultPage(`Connected ${email} to Cowork.`, true), {
       headers: { "Content-Type": "text/html" },
     });
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (isNative) {
+      return Response.redirect(
+        `${NATIVE_SCHEME}?ok=0&message=${encodeURIComponent(message)}`
+      );
+    }
     return new Response(
-      resultPage(
-        `Failed to connect Google account: ${err instanceof Error ? err.message : String(err)}`,
-        false
-      ),
+      resultPage(`Failed to connect Google account: ${message}`, false),
       { status: 500, headers: { "Content-Type": "text/html" } }
     );
   }
