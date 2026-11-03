@@ -5,6 +5,7 @@ export function proxy(req: NextRequest) {
 
   if (
     pathname.startsWith("/login") ||
+    pathname.startsWith("/privacy") ||
     pathname.startsWith("/api/login") ||
     // "Sign in with Google" IS the login flow for unauthenticated visitors,
     // so it must be reachable before a session cookie exists.
