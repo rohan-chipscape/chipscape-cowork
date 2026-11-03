@@ -76,7 +76,17 @@ export default function Home() {
       .catch(() => {});
     convos.refreshList();
     try {
-      setUserName(localStorage.getItem("cowork_user_name") ?? "");
+      const stored = localStorage.getItem("cowork_user_name");
+      // Server sets this (non-httpOnly) cookie right after "Sign in with
+      // Google" so the sidebar shows the CEO's real name on first login,
+      // before anything's been saved to localStorage yet.
+      const fromCookie = document.cookie
+        .split("; ")
+        .find((c) => c.startsWith("cowork_user_name="))
+        ?.split("=")[1];
+      const name = stored || (fromCookie ? decodeURIComponent(fromCookie) : "");
+      setUserName(name);
+      if (name && !stored) localStorage.setItem("cowork_user_name", name);
     } catch {
       // localStorage unavailable — falls back to "Guest" in the sidebar
     }

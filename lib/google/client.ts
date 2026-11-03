@@ -7,6 +7,7 @@ export const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/calendar",
   "https://www.googleapis.com/auth/drive.readonly",
   "https://www.googleapis.com/auth/userinfo.email",
+  "https://www.googleapis.com/auth/userinfo.profile",
 ];
 
 export function getOAuthClient() {
@@ -45,10 +46,18 @@ export function getAuthorizedClient(email: string) {
 export async function getEmailForTokens(tokens: {
   access_token?: string | null;
 }): Promise<string> {
+  const { email } = await getProfileForTokens(tokens);
+  return email;
+}
+
+/** Looks up the email + display name/photo that own a freshly-issued set of tokens. */
+export async function getProfileForTokens(tokens: {
+  access_token?: string | null;
+}): Promise<{ email: string; name?: string; picture?: string }> {
   const client = getOAuthClient();
   client.setCredentials(tokens);
   const oauth2 = google.oauth2({ version: "v2", auth: client });
   const { data } = await oauth2.userinfo.get();
   if (!data.email) throw new Error("Google didn't return an email address for this account.");
-  return data.email;
+  return { email: data.email, name: data.name ?? undefined, picture: data.picture ?? undefined };
 }

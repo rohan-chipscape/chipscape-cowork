@@ -5,9 +5,14 @@ export async function GET(req: Request) {
   await connection(); // env-dependent redirect; never prerender this
   try {
     const { searchParams } = new URL(req.url);
-    // Set by the native iOS app (via ASWebAuthenticationSession) so the
-    // callback knows to hand back a custom-scheme redirect instead of HTML.
-    const state = searchParams.get("state") === "native" ? "native" : undefined;
+    // "native"/"native_login": set by the iOS app (via ASWebAuthenticationSession)
+    // so the callback hands back a custom-scheme redirect instead of HTML.
+    // "login": this *is* the sign-in flow itself (no separate password), so the
+    // callback also starts a session instead of just linking a Gmail/Drive account.
+    const rawState = searchParams.get("state");
+    const state = ["native", "native_login", "login"].includes(rawState ?? "")
+      ? (rawState as string)
+      : undefined;
 
     const client = getOAuthClient();
     const url = client.generateAuthUrl({

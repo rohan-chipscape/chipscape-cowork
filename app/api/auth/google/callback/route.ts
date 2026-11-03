@@ -1,4 +1,4 @@
-import { getOAuthClient, getEmailForTokens } from "@/lib/google/client";
+import { getOAuthClient, getProfileForTokens } from "@/lib/google/client";
 import { saveAccountTokens } from "@/lib/google/accountStore";
 
 function resultPage(message: string, ok: boolean) {
@@ -32,18 +32,26 @@ function resultPage(message: string, ok: boolean) {
 </html>`;
 }
 
-const NATIVE_SCHEME = "chipscapecowork://google-connected";
+const NATIVE_CONNECT_SCHEME = "chipscapecowork://google-connected";
+const NATIVE_LOGIN_SCHEME = "chipscapecowork://google-login";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
   const error = url.searchParams.get("error");
-  const isNative = url.searchParams.get("state") === "native";
+  const state = url.searchParams.get("state");
+  const isNativeConnect = state === "native";
+  const isNativeLogin = state === "native_login";
+  const isWebLogin = state === "login";
+  const scheme = isNativeLogin ? NATIVE_LOGIN_SCHEME : NATIVE_CONNECT_SCHEME;
 
   if (error) {
-    if (isNative) {
+    if (isNativeConnect || isNativeLogin) {
+      return Response.redirect(`${scheme}?ok=0&message=${encodeURIComponent(error)}`);
+    }
+    if (isWebLogin) {
       return Response.redirect(
-        `${NATIVE_SCHEME}?ok=0&message=${encodeURIComponent(error)}`
+        new URL(`/login?error=${encodeURIComponent(error)}`, req.url)
       );
     }
     return new Response(
@@ -52,12 +60,14 @@ export async function GET(req: Request) {
     );
   }
   if (!code) {
-    if (isNative) {
-      return Response.redirect(
-        `${NATIVE_SCHEME}?ok=0&message=${encodeURIComponent("Missing authorization code.")}`
-      );
+    const message = "Missing authorization code.";
+    if (isNativeConnect || isNativeLogin) {
+      return Response.redirect(`${scheme}?ok=0&message=${encodeURIComponent(message)}`);
     }
-    return new Response(resultPage("Missing authorization code.", false), {
+    if (isWebLogin) {
+      return Response.redirect(new URL(`/login?error=${encodeURIComponent(message)}`, req.url));
+    }
+    return new Response(resultPage(message, false), {
       status: 400,
       headers: { "Content-Type": "text/html" },
     });
@@ -66,23 +76,60 @@ export async function GET(req: Request) {
   try {
     const client = getOAuthClient();
     const { tokens } = await client.getToken(code);
-    const email = await getEmailForTokens(tokens);
+    const profile = await getProfileForTokens(tokens);
+    const { email } = profile;
     saveAccountTokens(email, tokens);
 
-    if (isNative) {
+    if (isNativeConnect) {
+      return Response.redirect(`${scheme}?ok=1&email=${encodeURIComponent(email)}`);
+    }
+
+    // "login"/"native_login": signing in with Google *is* the app's auth —
+    // anyone with a Google account can sign in/sign up, same as ChatGPT.
+    // The session cookie's value is the shared app password either way
+    // (set here automatically instead of being typed in), so it plugs into
+    // the exact same proxy.ts check as the old password form.
+    const sessionSecret = process.env.APP_ACCESS_PASSWORD;
+    if (!sessionSecret) {
+      throw new Error("APP_ACCESS_PASSWORD is not set on the server.");
+    }
+
+    if (isNativeLogin) {
       return Response.redirect(
-        `${NATIVE_SCHEME}?ok=1&email=${encodeURIComponent(email)}`
+        `${scheme}?ok=1&email=${encodeURIComponent(email)}` +
+          `&name=${encodeURIComponent(profile.name ?? "")}` +
+          `&session=${encodeURIComponent(sessionSecret)}`
       );
     }
+
+    if (isWebLogin) {
+      // Response.redirect() returns a response with immutable headers, so
+      // the Set-Cookie headers have to be built into a fresh Response instead
+      // of appended afterward.
+      const headers = new Headers({ Location: new URL("/", req.url).toString() });
+      headers.append(
+        "Set-Cookie",
+        `cowork_auth=${sessionSecret}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 30}`
+      );
+      if (profile.name) {
+        headers.append(
+          "Set-Cookie",
+          `cowork_user_name=${encodeURIComponent(profile.name)}; Path=/; SameSite=Lax; Max-Age=${60 * 60 * 24 * 30}`
+        );
+      }
+      return new Response(null, { status: 302, headers });
+    }
+
     return new Response(resultPage(`Connected ${email} to Cowork.`, true), {
       headers: { "Content-Type": "text/html" },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    if (isNative) {
-      return Response.redirect(
-        `${NATIVE_SCHEME}?ok=0&message=${encodeURIComponent(message)}`
-      );
+    if (isNativeConnect || isNativeLogin) {
+      return Response.redirect(`${scheme}?ok=0&message=${encodeURIComponent(message)}`);
+    }
+    if (isWebLogin) {
+      return Response.redirect(new URL(`/login?error=${encodeURIComponent(message)}`, req.url));
     }
     return new Response(
       resultPage(`Failed to connect Google account: ${message}`, false),

@@ -6,6 +6,10 @@ export function proxy(req: NextRequest) {
   if (
     pathname.startsWith("/login") ||
     pathname.startsWith("/api/login") ||
+    // "Sign in with Google" IS the login flow for unauthenticated visitors,
+    // so it must be reachable before a session cookie exists.
+    pathname.startsWith("/api/auth/google/start") ||
+    pathname.startsWith("/api/auth/google/callback") ||
     // Download links use an unguessable UUID as the access control (like a
     // Drive "anyone with the link" share) so they work from a system browser
     // or another device without a session cookie.
