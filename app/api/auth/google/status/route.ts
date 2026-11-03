@@ -1,5 +1,6 @@
 import { connection } from "next/server";
-import { isGoogleConnected } from "@/lib/google/accountStore";
+import { getAccountTokens } from "@/lib/google/accountStore";
+import { getSessionEmail } from "@/lib/auth/session";
 
 export async function GET() {
   await connection(); // reads a local file at request time; never prerender this
@@ -8,5 +9,7 @@ export async function GET() {
     process.env.GOOGLE_CLIENT_SECRET &&
     process.env.GOOGLE_REDIRECT_URI
   );
-  return Response.json({ configured, connected: configured && isGoogleConnected() });
+  const email = await getSessionEmail();
+  const connected = configured && !!email && !!getAccountTokens(email)?.refresh_token;
+  return Response.json({ configured, connected, email: connected ? email : null });
 }

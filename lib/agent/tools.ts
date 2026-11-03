@@ -11,7 +11,7 @@ import {
   driveSearch,
   driveReadFile,
 } from "@/lib/tools/google";
-import { listConnectedAccounts } from "@/lib/google/accountStore";
+import { getAccountTokens } from "@/lib/google/accountStore";
 import { buildMemoryBlock } from "@/lib/memory/context";
 import { createPdfDocument } from "@/lib/files/generateDocument";
 
@@ -75,141 +75,173 @@ const BASE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
   },
 ];
 
-function buildGoogleTools(accounts: string[]): OpenAI.Chat.ChatCompletionTool[] {
-  const accountProp = {
-    type: "string" as const,
-    enum: accounts,
-    description:
-      "Which connected Google account to use. If the user didn't specify and more than one " +
-      "account is connected, ask them which one before calling this tool.",
-  };
+// Google tools never take an "account" argument from the model — they always
+// act on whichever Google account this session signed in with (see
+// lib/auth/session.ts), the same way ChatGPT's connectors are scoped to
+// whoever is currently signed in, not a shared pool of every account anyone
+// has ever connected.
+const GOOGLE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
+  {
+    type: "function",
+    function: {
+      name: "gmail_search",
+      description: "Search the signed-in user's Gmail inbox. Returns matching messages' id, subject, from, date, and snippet.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Gmail search syntax, e.g. 'from:boss@company.com is:unread'.",
+          },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "gmail_read",
+      description: "Read the full content of one Gmail message by its id (from gmail_search).",
+      parameters: {
+        type: "object",
+        properties: { message_id: { type: "string" } },
+        required: ["message_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "gmail_send",
+      description: "Send an email from the signed-in user's Gmail account. Always requires explicit approval.",
+      parameters: {
+        type: "object",
+        properties: {
+          to: { type: "string" },
+          subject: { type: "string" },
+          body: { type: "string" },
+        },
+        required: ["to", "subject", "body"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "calendar_list_events",
+      description: "List events on the signed-in user's Google Calendar between two ISO datetimes.",
+      parameters: {
+        type: "object",
+        properties: {
+          time_min: { type: "string", description: "ISO datetime, e.g. 2026-10-22T00:00:00Z" },
+          time_max: { type: "string", description: "ISO datetime" },
+        },
+        required: ["time_min", "time_max"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "calendar_create_event",
+      description: "Create an event on the signed-in user's Google Calendar. Always requires explicit approval.",
+      parameters: {
+        type: "object",
+        properties: {
+          summary: { type: "string" },
+          start: { type: "string", description: "ISO datetime" },
+          end: { type: "string", description: "ISO datetime" },
+          description: { type: "string" },
+          attendees: { type: "array", items: { type: "string" }, description: "Attendee email addresses" },
+        },
+        required: ["summary", "start", "end"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "drive_search",
+      description: "Search the signed-in user's Google Drive for files matching text. Returns id, name, mimeType, link.",
+      parameters: {
+        type: "object",
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "drive_read_file",
+      description: "Read the text content of a Google Drive file (Docs, Sheets, or plain text) by its id (from drive_search).",
+      parameters: {
+        type: "object",
+        properties: { file_id: { type: "string" } },
+        required: ["file_id"],
+      },
+    },
+  },
+];
 
-  return [
-    {
-      type: "function",
-      function: {
-        name: "gmail_search",
-        description: "Search a connected Gmail inbox. Returns matching messages' id, subject, from, date, and snippet.",
-        parameters: {
-          type: "object",
-          properties: {
-            account: accountProp,
-            query: {
-              type: "string",
-              description: "Gmail search syntax, e.g. 'from:boss@company.com is:unread'.",
-            },
-          },
-          required: ["account", "query"],
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "gmail_read",
-        description: "Read the full content of one Gmail message by its id (from gmail_search).",
-        parameters: {
-          type: "object",
-          properties: {
-            account: accountProp,
-            message_id: { type: "string" },
-          },
-          required: ["account", "message_id"],
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "gmail_send",
-        description: "Send an email from a connected Gmail account. Always requires explicit approval.",
-        parameters: {
-          type: "object",
-          properties: {
-            account: accountProp,
-            to: { type: "string" },
-            subject: { type: "string" },
-            body: { type: "string" },
-          },
-          required: ["account", "to", "subject", "body"],
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "calendar_list_events",
-        description: "List events on a connected Google Calendar between two ISO datetimes.",
-        parameters: {
-          type: "object",
-          properties: {
-            account: accountProp,
-            time_min: { type: "string", description: "ISO datetime, e.g. 2026-10-22T00:00:00Z" },
-            time_max: { type: "string", description: "ISO datetime" },
-          },
-          required: ["account", "time_min", "time_max"],
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "calendar_create_event",
-        description: "Create an event on a connected Google Calendar. Always requires explicit approval.",
-        parameters: {
-          type: "object",
-          properties: {
-            account: accountProp,
-            summary: { type: "string" },
-            start: { type: "string", description: "ISO datetime" },
-            end: { type: "string", description: "ISO datetime" },
-            description: { type: "string" },
-            attendees: { type: "array", items: { type: "string" }, description: "Attendee email addresses" },
-          },
-          required: ["account", "summary", "start", "end"],
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "drive_search",
-        description: "Search a connected Google Drive for files matching text. Returns id, name, mimeType, link.",
-        parameters: {
-          type: "object",
-          properties: {
-            account: accountProp,
-            query: { type: "string" },
-          },
-          required: ["account", "query"],
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "drive_read_file",
-        description: "Read the text content of a Google Drive file (Docs, Sheets, or plain text) by its id (from drive_search).",
-        parameters: {
-          type: "object",
-          properties: {
-            account: accountProp,
-            file_id: { type: "string" },
-          },
-          required: ["account", "file_id"],
-        },
-      },
-    },
-  ];
+const GOOGLE_TOOL_NAMES = new Set([
+  "gmail_search",
+  "gmail_read",
+  "gmail_send",
+  "calendar_list_events",
+  "calendar_create_event",
+  "drive_search",
+  "drive_read_file",
+]);
+
+/** Is this session's Google account actually connected (has a refresh token)? */
+function isSessionAccountConnected(sessionEmail: string | null): boolean {
+  if (!sessionEmail) return false;
+  return !!getAccountTokens(sessionEmail)?.refresh_token;
 }
 
-export function getAgentTools(): OpenAI.Chat.ChatCompletionTool[] {
-  const accounts = listConnectedAccounts();
-  return accounts.length > 0 ? [...BASE_TOOLS, ...buildGoogleTools(accounts)] : BASE_TOOLS;
+export function getAgentTools(sessionEmail: string | null): OpenAI.Chat.ChatCompletionTool[] {
+  return isSessionAccountConnected(sessionEmail) ? [...BASE_TOOLS, ...GOOGLE_TOOLS] : BASE_TOOLS;
 }
 
-export async function executeTool(name: string, args: Record<string, unknown>) {
-  const account = String(args.account ?? "");
+export async function executeTool(
+  name: string,
+  args: Record<string, unknown>,
+  sessionEmail: string | null
+) {
+  if (GOOGLE_TOOL_NAMES.has(name)) {
+    if (!sessionEmail) return { error: "No Google account is connected for this session." };
+    switch (name) {
+      case "gmail_search":
+        return gmailSearch(sessionEmail, String(args.query ?? ""));
+      case "gmail_read":
+        return gmailRead(sessionEmail, String(args.message_id ?? ""));
+      case "gmail_send":
+        return gmailSend(
+          sessionEmail,
+          String(args.to ?? ""),
+          String(args.subject ?? ""),
+          String(args.body ?? "")
+        );
+      case "calendar_list_events":
+        return calendarListEvents(sessionEmail, String(args.time_min ?? ""), String(args.time_max ?? ""));
+      case "calendar_create_event":
+        return calendarCreateEvent({
+          account: sessionEmail,
+          summary: String(args.summary ?? ""),
+          start: String(args.start ?? ""),
+          end: String(args.end ?? ""),
+          description: args.description ? String(args.description) : undefined,
+          attendees: Array.isArray(args.attendees) ? args.attendees.map(String) : undefined,
+        });
+      case "drive_search":
+        return driveSearch(sessionEmail, String(args.query ?? ""));
+      case "drive_read_file":
+        return driveReadFile(sessionEmail, String(args.file_id ?? ""));
+    }
+  }
+
   switch (name) {
     case "web_search":
       return webSearch(String(args.query ?? ""));
@@ -226,47 +258,15 @@ export async function executeTool(name: string, args: Record<string, unknown>) {
         download_url: `/api/files/download/${id}/${encodeURIComponent(filename)}`,
       };
     }
-    case "gmail_search":
-      return gmailSearch(account, String(args.query ?? ""));
-    case "gmail_read":
-      return gmailRead(account, String(args.message_id ?? ""));
-    case "gmail_send":
-      return gmailSend(
-        account,
-        String(args.to ?? ""),
-        String(args.subject ?? ""),
-        String(args.body ?? "")
-      );
-    case "calendar_list_events":
-      return calendarListEvents(account, String(args.time_min ?? ""), String(args.time_max ?? ""));
-    case "calendar_create_event":
-      return calendarCreateEvent({
-        account,
-        summary: String(args.summary ?? ""),
-        start: String(args.start ?? ""),
-        end: String(args.end ?? ""),
-        description: args.description ? String(args.description) : undefined,
-        attendees: Array.isArray(args.attendees) ? args.attendees.map(String) : undefined,
-      });
-    case "drive_search":
-      return driveSearch(account, String(args.query ?? ""));
-    case "drive_read_file":
-      return driveReadFile(account, String(args.file_id ?? ""));
     default:
       return { error: `Unknown tool: ${name}` };
   }
 }
 
-export function getAgentSystemPrompt(): string {
-  const accounts = listConnectedAccounts();
-  const accountsNote =
-    accounts.length === 0
-      ? "No Google accounts are connected yet, so Gmail/Calendar/Drive tools aren't available."
-      : accounts.length === 1
-      ? `The Google account "${accounts[0]}" is connected and available for Gmail/Calendar/Drive tools.`
-      : `These Google accounts are connected: ${accounts.join(", ")}. If the user's request doesn't make ` +
-        "it clear which account to use, ask them which one before calling any Gmail/Calendar/Drive tool — " +
-        "never guess.";
+export function getAgentSystemPrompt(sessionEmail: string | null): string {
+  const accountsNote = isSessionAccountConnected(sessionEmail)
+    ? `Gmail/Calendar/Drive tools are available for the signed-in account (${sessionEmail}).`
+    : "Gmail/Calendar/Drive tools aren't available — this account isn't connected to Google.";
 
   return (
     "You are an agentic assistant working directly for a CEO. You can call tools to search the web, " +

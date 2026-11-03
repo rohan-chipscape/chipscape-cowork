@@ -111,6 +111,13 @@ export async function GET(req: Request) {
         "Set-Cookie",
         `cowork_auth=${sessionSecret}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 30}`
       );
+      // Scopes the agent's Gmail/Calendar/Drive tools to exactly the account
+      // this browser signed in with — never a global pool of every account
+      // anyone has ever connected (like ChatGPT: your session is your account).
+      headers.append(
+        "Set-Cookie",
+        `cowork_email=${encodeURIComponent(email)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${60 * 60 * 24 * 30}`
+      );
       if (profile.name) {
         headers.append(
           "Set-Cookie",

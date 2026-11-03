@@ -1,5 +1,6 @@
 import { runAgentStep } from "@/lib/agent/run";
 import type { AgentMessage } from "@/lib/agent/types";
+import { getSessionEmail } from "@/lib/auth/session";
 
 export const maxDuration = 60;
 
@@ -11,7 +12,8 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await runAgentStep(transcript);
+    const sessionEmail = await getSessionEmail();
+    const result = await runAgentStep(transcript, sessionEmail);
     return Response.json(result);
   } catch (err) {
     return Response.json(

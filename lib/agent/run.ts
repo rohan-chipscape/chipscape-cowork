@@ -26,17 +26,18 @@ function toOpenAIMessages(
 }
 
 export async function runAgentStep(
-  history: AgentMessage[]
+  history: AgentMessage[],
+  sessionEmail: string | null
 ): Promise<AgentStepResult> {
   const { client, model } = getAgentClient();
 
   const res = await client.chat.completions.create({
     model,
     max_completion_tokens: 1500,
-    tools: getAgentTools(),
+    tools: getAgentTools(sessionEmail),
     tool_choice: "auto",
     messages: [
-      { role: "system", content: getAgentSystemPrompt() },
+      { role: "system", content: getAgentSystemPrompt(sessionEmail) },
       ...toOpenAIMessages(history),
     ],
   });
