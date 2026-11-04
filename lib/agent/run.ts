@@ -73,12 +73,16 @@ export async function classifyIntent(
         role: "system",
         content:
           "Classify the user's message as exactly one word: AGENT or DEBATE.\n" +
-          "AGENT: the request needs current/real-time information, searching or reading a web page, " +
-          "running a calculation/code, taking some action, or creating/writing/drafting a document, " +
-          "report, memo, or PDF file to hand back.\n" +
-          "DEBATE: the request is a question, opinion, analysis, or advice that can be answered from " +
-          "general knowledge and reasoning alone, with no need to search, fetch, compute, or produce a " +
-          "downloadable file.\n" +
+          "DEBATE is the default — use it for any question, opinion, analysis, explanation, advice, or " +
+          "request for ideas/recommendations, even if it mentions 'today' or sounds time-sensitive (e.g. " +
+          "'what's today's date', 'best stock to buy today', 'what should I focus on this week'). A panel " +
+          "of models will reason about it from general knowledge; that's the whole point of this app, so " +
+          "don't route away from it just because a sharper answer could theoretically use fresh data.\n" +
+          "AGENT is the exception — use it ONLY when the request clearly can't be done without actually " +
+          "calling a tool: searching the live web for something specific, fetching/reading a named URL, " +
+          "running a calculation/code, checking/sending email, checking/creating a calendar event, or " +
+          "writing/drafting a document, report, memo, or PDF file to hand back as a download.\n" +
+          "If in doubt, choose DEBATE.\n" +
           "Reply with only one word: AGENT or DEBATE.",
       },
       { role: "user", content: question },
