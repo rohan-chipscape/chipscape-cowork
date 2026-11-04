@@ -312,17 +312,20 @@ export function getAgentSystemPrompt(sessionEmail: string | null): string {
     "longer extracted `content` field (and sometimes a synthesized `answer`), which usually has the precise " +
     "figure already; read those closely before reaching for web_fetch, since web_fetch is a plain HTTP request " +
     "that can't render JavaScript and will come back empty on many modern pages (finance/data dashboards " +
-    "especially). If a web_fetch call errors out or a search doesn't nail it down, don't give up or hedge — " +
-    "try a different result from the same search, or run another search with a more specific query, before " +
-    "concluding you can't find it. For a question that depends on today's date specifically (a live price, " +
-    "today's news, a score from today), one search isn't enough if its most recent result isn't actually dated " +
-    "today — always run at least one more, sharper search (add the exact date, the ticker/symbol, words like " +
-    "'live' or 'closing price', or try a different likely source) before concluding fresher data isn't out " +
-    "there. Only settle for slightly-older data after that second attempt still comes up short. Trust what the " +
-    "search results actually say over your own prior assumptions — whether a company is independently listed, " +
-    "its ticker, its ownership structure, or similar facts can change after your training (a new IPO, spin-off, " +
-    "or merger), so if a search result names a specific ticker or price for the exact entity asked about, use " +
-    "it, don't override it with a flat claim that the entity 'isn't independently traded' from memory. Once " +
+    "especially). One search is rarely enough for anything accuracy-critical — a price, a date, a version " +
+    "number, a name, a statistic, who holds some role, whether something still exists or has changed. If the " +
+    "first search's results are thin, generic, conflicting between sources, or don't actually cover the exact " +
+    "thing asked (e.g. the most recent result isn't dated today when today's figure was asked for), don't give " +
+    "up or hedge and don't present a guess as if it were confirmed — run at least one more, sharper search " +
+    "(narrower keywords, an exact date, a name/ticker/version number, a different likely source) or fetch a " +
+    "specific promising result, before finalizing. Only settle for an approximate or older answer after that " +
+    "second attempt still comes up short, and say plainly that it's approximate when you do. Trust what the " +
+    "search results actually say over your own prior assumptions about anything that can change over time — " +
+    "whether a company is independently listed and its ticker, who holds a role or office, a product's current " +
+    "version or price, a policy, a status — all of these can be different from what you learned in training " +
+    "(a new IPO, spin-off, merger, release, election, or policy change). If a search result states a specific, " +
+    "concrete fact about the exact thing asked about, use it; don't override it with a flat claim from memory " +
+    "that contradicts it. Once " +
     "you've searched, commit to a single, direct, well-formatted answer — " +
     "lead with the number or fact itself (a short table or bullet list of the key figures reads best), not a " +
     "multi-paragraph walkthrough of what you searched for, what's ambiguous, or which of several entities the " +
