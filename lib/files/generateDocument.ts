@@ -68,6 +68,11 @@ function renderTable(doc: PDFKit.PDFDocument, rows: string[][]) {
     });
 
     doc.y = startY + rowHeight;
+    // Each cell's text() call was given an explicit x, which leaves
+    // PDFKit's cursor sitting at the last cell drawn — reset it back to
+    // the left margin so the next row (or the text after the table) isn't
+    // squeezed into whatever's left of the page from that x onward.
+    doc.x = doc.page.margins.left;
   });
 
   doc.moveDown(0.5);
@@ -75,6 +80,9 @@ function renderTable(doc: PDFKit.PDFDocument, rows: string[][]) {
 }
 
 async function renderDiagram(doc: PDFKit.PDFDocument, description: string) {
+  // Defensive: a preceding table's explicit-x cell text can leave the
+  // cursor shifted (see renderTable's own reset for the main case).
+  doc.x = doc.page.margins.left;
   try {
     const buffer = await generateImageBuffer(
       `A clean, professional, clearly labeled technical diagram on a plain white background, simple shapes and legible text labels, no decorative styling: ${description}`
@@ -130,11 +138,33 @@ async function renderBody(doc: PDFKit.PDFDocument, content: string) {
       continue;
     }
 
-    const diagram = line.match(/^\[DIAGRAM:\s*(.+)\]$/i);
-    if (diagram) {
-      await renderDiagram(doc, diagram[1]);
-      i++;
-      continue;
+    // The model sometimes writes a multi-line description inside the
+    // brackets (with its own bullet points) instead of putting it all on
+    // one line — collect lines until the closing ']' shows up, rather than
+    // requiring a single-line match.
+    const diagramStart = line.trim().match(/^\[DIAGRAM:\s*(.*)$/i);
+    if (diagramStart) {
+      const descLines = [diagramStart[1]];
+      let j = i;
+      // Cap how far we'll scan for a closing ']' so a missing bracket
+      // can't swallow the rest of the document into one "diagram".
+      while (
+        !descLines[descLines.length - 1].trimEnd().endsWith("]") &&
+        j + 1 < lines.length &&
+        j - i < 20
+      ) {
+        j++;
+        descLines.push(lines[j].trim());
+      }
+      let desc = descLines.join(" ").trim();
+      if (desc.endsWith("]")) {
+        desc = desc.slice(0, -1).trim();
+        await renderDiagram(doc, desc);
+        i = j + 1;
+        continue;
+      }
+      // No closing bracket found within the cap — treat the original line
+      // as ordinary text instead of guessing.
     }
 
     const h2 = line.match(/^##\s+(.*)/);
