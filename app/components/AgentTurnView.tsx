@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { AgentTurn } from "@/lib/useAgentChat";
 import { Markdown } from "@/app/components/Markdown";
 import { CopyButton } from "@/app/components/CopyButton";
@@ -219,6 +220,22 @@ function BusyStatus({ label, status, errorLabel }: { label: string; status: stri
   );
 }
 
+function Chevron({ expanded }: { expanded: boolean }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      className={`shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`}
+    >
+      <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function SearchResultsPreview({
   query,
   results,
@@ -226,48 +243,69 @@ function SearchResultsPreview({
   query: string;
   results: { title: string; url: string; snippet: string }[];
 }) {
+  const [expanded, setExpanded] = useState(false);
   return (
     <div className="rounded-2xl bg-[#2f2f2f] px-4 py-3">
-      <p className="mb-2 text-xs text-neutral-500">
-        Searched the web for &ldquo;{query}&rdquo;
-      </p>
-      {results.length === 0 ? (
-        <p className="text-sm text-neutral-400">No results found.</p>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {results.map((r, i) => (
-            <a
-              key={i}
-              href={r.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block rounded-lg border border-white/10 bg-[#1f1f1f] p-2.5 hover:bg-[#262626]"
-            >
-              <p className="truncate text-sm font-medium text-[#5b9bff]">{r.title}</p>
-              <p className="truncate text-xs text-neutral-500">{r.url}</p>
-              {r.snippet && (
-                <p className="mt-1 line-clamp-2 text-xs text-neutral-400">{r.snippet}</p>
-              )}
-            </a>
-          ))}
-        </div>
-      )}
+      <button
+        onClick={() => setExpanded((e) => !e)}
+        className="flex w-full items-center justify-between gap-2 text-left text-xs text-neutral-400"
+      >
+        <span>
+          Searched the web for &ldquo;{query}&rdquo; · {results.length} source
+          {results.length === 1 ? "" : "s"}
+        </span>
+        <Chevron expanded={expanded} />
+      </button>
+      {expanded &&
+        (results.length === 0 ? (
+          <p className="mt-2 text-sm text-neutral-400">No results found.</p>
+        ) : (
+          <div className="mt-2 flex flex-col gap-2">
+            {results.map((r, i) => (
+              <a
+                key={i}
+                href={r.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block rounded-lg border border-white/10 bg-[#1f1f1f] p-2.5 hover:bg-[#262626]"
+              >
+                <p className="truncate text-sm font-medium text-[#5b9bff]">{r.title}</p>
+                <p className="truncate text-xs text-neutral-500">{r.url}</p>
+                {r.snippet && (
+                  <p className="mt-1 line-clamp-2 text-xs text-neutral-400">{r.snippet}</p>
+                )}
+              </a>
+            ))}
+          </div>
+        ))}
     </div>
   );
 }
 
 function FetchedPagePreview({ url, text }: { url: string; text: string }) {
+  const [expanded, setExpanded] = useState(false);
   return (
     <div className="rounded-2xl bg-[#2f2f2f] px-4 py-3">
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block truncate text-xs font-medium text-[#5b9bff] hover:underline"
+      <button
+        onClick={() => setExpanded((e) => !e)}
+        className="flex w-full items-center justify-between gap-2 text-left text-xs text-neutral-400"
       >
-        {url}
-      </a>
-      <p className="mt-2 line-clamp-6 whitespace-pre-wrap text-xs text-neutral-400">{text}</p>
+        <span className="truncate">Read {url}</span>
+        <Chevron expanded={expanded} />
+      </button>
+      {expanded && (
+        <>
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 block truncate text-xs text-[#5b9bff] hover:underline"
+          >
+            Open original
+          </a>
+          <p className="mt-1 whitespace-pre-wrap text-xs text-neutral-400">{text}</p>
+        </>
+      )}
     </div>
   );
 }
