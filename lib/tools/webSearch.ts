@@ -14,7 +14,8 @@ export async function webSearch(query: string) {
       body: JSON.stringify({
         api_key: apiKey,
         query,
-        max_results: 5,
+        max_results: 8,
+        search_depth: "advanced",
       }),
       signal: AbortSignal.timeout(15000),
     });

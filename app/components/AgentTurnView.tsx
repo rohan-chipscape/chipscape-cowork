@@ -3,6 +3,7 @@
 import type { AgentTurn } from "@/lib/useAgentChat";
 import { Markdown } from "@/app/components/Markdown";
 import { CopyButton } from "@/app/components/CopyButton";
+import { SIDE_EFFECT_TOOLS } from "@/lib/agent/types";
 
 const TOOL_LABELS: Record<string, string> = {
   web_search: "Search the web",
@@ -18,8 +19,6 @@ const TOOL_LABELS: Record<string, string> = {
   drive_search: "Search Google Drive",
   drive_read_file: "Read a Drive file",
 };
-
-const SIDE_EFFECT_TOOLS = new Set(["gmail_send", "calendar_create_event"]);
 
 const GOOGLE_TOOLS = new Set([
   "gmail_search",
@@ -205,6 +204,58 @@ function ImageGeneratingStatus({ status }: { status: string }) {
   );
 }
 
+function BusyStatus({ label, status, errorLabel }: { label: string; status: string; errorLabel: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-2xl bg-[#2f2f2f] px-4 py-3 text-sm text-neutral-400">
+      {status === "error" ? (
+        errorLabel
+      ) : (
+        <>
+          <span className="h-3 w-3 animate-spin rounded-full border-2 border-neutral-500 border-t-transparent" />
+          {label}
+        </>
+      )}
+    </div>
+  );
+}
+
+function SearchResultsPreview({
+  query,
+  results,
+}: {
+  query: string;
+  results: { title: string; url: string; snippet: string }[];
+}) {
+  return (
+    <div className="rounded-2xl bg-[#2f2f2f] px-4 py-3">
+      <p className="mb-2 text-xs text-neutral-500">
+        Searched the web for &ldquo;{query}&rdquo;
+      </p>
+      {results.length === 0 ? (
+        <p className="text-sm text-neutral-400">No results found.</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {results.map((r, i) => (
+            <a
+              key={i}
+              href={r.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block rounded-lg border border-white/10 bg-[#1f1f1f] p-2.5 hover:bg-[#262626]"
+            >
+              <p className="truncate text-sm font-medium text-[#5b9bff]">{r.title}</p>
+              <p className="truncate text-xs text-neutral-500">{r.url}</p>
+              {r.snippet && (
+                <p className="mt-1 line-clamp-2 text-xs text-neutral-400">{r.snippet}</p>
+              )}
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     pending: "bg-amber-900/40 text-amber-300",
@@ -246,6 +297,34 @@ export function AgentTurnView({
             />
           ) : (
             <ImageGeneratingStatus key={step.id} status={step.status} />
+          );
+        }
+
+        if (step.name === "web_search") {
+          const result = step.result ? safeParse(step.result) : null;
+          if (result?.results) {
+            return (
+              <SearchResultsPreview
+                key={step.id}
+                query={args?.query ?? ""}
+                results={result.results}
+              />
+            );
+          }
+          if (result?.error) {
+            return (
+              <div key={step.id} className="rounded-2xl bg-[#2f2f2f] px-4 py-3 text-sm text-red-300">
+                {result.error}
+              </div>
+            );
+          }
+          return (
+            <BusyStatus
+              key={step.id}
+              label="Searching the web…"
+              errorLabel="Couldn't search the web."
+              status={step.status}
+            />
           );
         }
 

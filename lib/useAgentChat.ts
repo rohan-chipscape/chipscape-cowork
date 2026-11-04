@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import type { AgentMessage, AgentToolCall } from "@/lib/agent/types";
+import { SIDE_EFFECT_TOOLS } from "@/lib/agent/types";
 import type { HistoryMessage } from "@/lib/useDebateChat";
 
 export type AgentStepLog = {
@@ -76,7 +77,6 @@ export function useAgentChat() {
       ];
       update(turnId, (t) => ({
         ...t,
-        pendingCalls: calls,
         steps: [
           ...t.steps,
           ...calls.map((c) => ({
@@ -87,7 +87,48 @@ export function useAgentChat() {
           })),
         ],
       }));
-      setIsBusy(false);
+
+      const autoCalls = calls.filter((c) => !SIDE_EFFECT_TOOLS.has(c.name));
+      const approvalCalls = calls.filter((c) => SIDE_EFFECT_TOOLS.has(c.name));
+
+      if (autoCalls.length > 0) {
+        const decisions = Object.fromEntries(autoCalls.map((c) => [c.id, true]));
+        const execRes = await fetch("/api/agent/execute", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ calls: autoCalls, decisions }),
+        });
+        const execData = await execRes.json();
+
+        const toolMessages: AgentMessage[] = execData.results.map(
+          (r: { id: string; result: unknown }) => ({
+            role: "tool" as const,
+            tool_call_id: r.id,
+            content: JSON.stringify(r.result),
+          })
+        );
+        transcripts.current[turnId] = [
+          ...transcripts.current[turnId],
+          ...toolMessages,
+        ];
+
+        update(turnId, (t) => ({
+          ...t,
+          steps: t.steps.map((s) => {
+            const match = execData.results.find((r: { id: string }) => r.id === s.id);
+            if (!match) return s;
+            return { ...s, status: "done", result: JSON.stringify(match.result).slice(0, 2000) };
+          }),
+        }));
+      }
+
+      if (approvalCalls.length > 0) {
+        update(turnId, (t) => ({ ...t, pendingCalls: approvalCalls }));
+        setIsBusy(false);
+        return;
+      }
+
+      await runLoop(turnId, depth + 1);
       return;
     }
 

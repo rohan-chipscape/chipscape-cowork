@@ -12,3 +12,9 @@ export type AgentMessage =
 export type AgentStepResult =
   | { type: "final"; text: string }
   | { type: "tool_calls"; calls: AgentToolCall[] };
+
+// Tools that actually change something outside the app (sending an email,
+// creating a calendar event) require explicit approval before running.
+// Read-only/generative tools (search, fetch, document/image generation) run
+// immediately, same as ChatGPT's own browsing/tool use.
+export const SIDE_EFFECT_TOOLS = new Set(["gmail_send", "calendar_create_event"]);
