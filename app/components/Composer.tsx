@@ -60,7 +60,7 @@ export function Composer({
           ref={fileInputRef}
           type="file"
           className="hidden"
-          accept=".pdf,.xlsx,.xls,.csv,.txt,.md,.json"
+          accept=".pdf,.docx,.xlsx,.xls,.csv,.txt,.md,.json,.jpg,.jpeg,.png,.webp"
           onChange={onFileSelected}
         />
         <button
