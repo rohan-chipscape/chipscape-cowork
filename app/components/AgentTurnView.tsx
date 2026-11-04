@@ -9,6 +9,7 @@ const TOOL_LABELS: Record<string, string> = {
   web_fetch: "Fetch a web page",
   run_js: "Run JavaScript",
   create_document: "Create a document",
+  generate_image: "Generate an image",
   gmail_search: "Search Gmail",
   gmail_read: "Read a Gmail message",
   gmail_send: "Send an email",
@@ -38,6 +39,8 @@ function prettyArgs(name: string, raw: string): string {
     switch (name) {
       case "web_search":
         return `“${args.query}”`;
+      case "generate_image":
+        return `“${args.prompt}”`;
       case "web_fetch":
         return args.url;
       case "run_js":
@@ -164,6 +167,19 @@ function DocumentPreview({ filename, downloadUrl }: { filename: string; download
   );
 }
 
+function ImagePreview({ filename, downloadUrl }: { filename: string; downloadUrl: string }) {
+  return (
+    <a href={downloadUrl} target="_blank" rel="noopener noreferrer" className="block">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={downloadUrl}
+        alt={filename}
+        className="max-h-80 rounded-lg border border-white/10 object-contain"
+      />
+    </a>
+  );
+}
+
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     pending: "bg-amber-900/40 text-amber-300",
@@ -234,6 +250,13 @@ export function AgentTurnView({
           {step.name === "create_document" && step.result && safeParse(step.result)?.download_url ? (
             <div className="mt-2">
               <DocumentPreview
+                filename={safeParse(step.result).filename}
+                downloadUrl={safeParse(step.result).download_url}
+              />
+            </div>
+          ) : step.name === "generate_image" && step.result && safeParse(step.result)?.download_url ? (
+            <div className="mt-2">
+              <ImagePreview
                 filename={safeParse(step.result).filename}
                 downloadUrl={safeParse(step.result).download_url}
               />

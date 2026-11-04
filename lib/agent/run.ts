@@ -80,8 +80,9 @@ export async function classifyIntent(
           "don't route away from it just because a sharper answer could theoretically use fresh data.\n" +
           "AGENT is the exception — use it ONLY when the request clearly can't be done without actually " +
           "calling a tool: searching the live web for something specific, fetching/reading a named URL, " +
-          "running a calculation/code, checking/sending email, checking/creating a calendar event, or " +
-          "writing/drafting a document, report, memo, or PDF file to hand back as a download.\n" +
+          "running a calculation/code, checking/sending email, checking/creating a calendar event, " +
+          "writing/drafting a document, report, memo, or PDF file to hand back as a download, or " +
+          "generating/creating/drawing an image, picture, logo, or illustration.\n" +
           "If in doubt, choose DEBATE.\n" +
           "Reply with only one word: AGENT or DEBATE.",
       },

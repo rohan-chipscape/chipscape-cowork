@@ -1,18 +1,5 @@
-import { randomUUID } from "crypto";
-import { mkdirSync, createWriteStream, existsSync } from "fs";
-import path from "path";
 import PDFDocument from "pdfkit";
-
-const FILES_DIR = path.join(process.cwd(), ".data", "files");
-
-function ensureDir() {
-  if (!existsSync(FILES_DIR)) mkdirSync(FILES_DIR, { recursive: true });
-}
-
-function sanitizeFilename(title: string): string {
-  const base = title.trim().replace(/[^a-zA-Z0-9 _-]/g, "").trim() || "Document";
-  return base.slice(0, 80);
-}
+import { saveGeneratedFile, sanitizeFilename } from "./generatedFiles";
 
 /**
  * Very small markdown-ish renderer: enough to make agent-generated content
@@ -55,34 +42,21 @@ export async function createPdfDocument(
   title: string,
   content: string
 ): Promise<{ id: string; filename: string }> {
-  ensureDir();
-  const id = randomUUID();
-  const filename = `${sanitizeFilename(title)}.pdf`;
-  const filePath = path.join(FILES_DIR, `${id}.pdf`);
-
   const doc = new PDFDocument({ margin: 54 });
-  const stream = createWriteStream(filePath);
-  doc.pipe(stream);
+  const chunks: Buffer[] = [];
+  doc.on("data", (chunk) => chunks.push(chunk));
 
   doc.font("Helvetica-Bold").fontSize(20).text(title);
   doc.moveDown();
   doc.font("Helvetica").fontSize(11);
   renderBody(doc, content);
-
   doc.end();
 
   await new Promise<void>((resolve, reject) => {
-    stream.on("finish", () => resolve());
-    stream.on("error", reject);
+    doc.on("end", () => resolve());
+    doc.on("error", reject);
   });
 
-  return { id, filename };
-}
-
-export function getDocumentPath(id: string): string | null {
-  // id comes straight from the URL param — reject anything that isn't a bare
-  // UUID before it ever touches the filesystem, so no path traversal is possible.
-  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
-  const filePath = path.join(FILES_DIR, `${id}.pdf`);
-  return existsSync(filePath) ? filePath : null;
+  const { id } = saveGeneratedFile(Buffer.concat(chunks), "pdf");
+  return { id, filename: `${sanitizeFilename(title)}.pdf` };
 }

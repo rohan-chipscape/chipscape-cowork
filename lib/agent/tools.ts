@@ -14,6 +14,7 @@ import {
 import { getAccountTokens } from "@/lib/google/accountStore";
 import { buildMemoryBlock } from "@/lib/memory/context";
 import { createPdfDocument } from "@/lib/files/generateDocument";
+import { generateImage } from "@/lib/files/generateImage";
 
 const BASE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
   {
@@ -70,6 +71,23 @@ const BASE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
           content: { type: "string", description: "The full body of the document." },
         },
         required: ["title", "content"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "generate_image",
+      description:
+        "Generate an image from a text description — use this whenever the user asks you to generate, " +
+        "create, draw, or make an image, picture, logo, or illustration. Returns a downloadable PNG.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "A detailed description of the image to generate." },
+          title: { type: "string", description: "Short title, used as the filename (optional)." },
+        },
+        required: ["prompt"],
       },
     },
   },
@@ -258,6 +276,17 @@ export async function executeTool(
         download_url: `/api/files/download/${id}/${encodeURIComponent(filename)}`,
       };
     }
+    case "generate_image": {
+      const { id, filename } = await generateImage(
+        String(args.prompt ?? ""),
+        args.title ? String(args.title) : undefined
+      );
+      return {
+        id,
+        filename,
+        download_url: `/api/files/download/${id}/${encodeURIComponent(filename)}`,
+      };
+    }
     default:
       return { error: `Unknown tool: ${name}` };
   }
@@ -270,15 +299,18 @@ export function getAgentSystemPrompt(sessionEmail: string | null): string {
 
   return (
     "You are an agentic assistant working directly for a CEO. You can call tools to search the web, " +
-    "fetch specific pages, run short JavaScript calculations, create a downloadable PDF document, and — " +
+    "fetch specific pages, run short JavaScript calculations, create a downloadable PDF document, generate " +
+    "an image from a text description, and — " +
     `when connected — search/read/send Gmail, list/create Google Calendar events, and search/read Google ` +
     `Drive files. ${accountsNote} ` +
     "Every tool call is shown to the CEO for approval before it runs, and you will see the result (or a " +
     "note that it was denied) afterward. Use tools only when they're actually needed to answer accurately " +
     "or complete the task — for a question you can answer directly from your own knowledge, just answer " +
     "directly without calling a tool. If the CEO asks you to write, draft, or give them a document, report, " +
-    "memo, or PDF, always use create_document rather than just putting the content in a chat reply. Be " +
-    "concise, direct, and decision-useful. When you're done, give one clear final answer." +
+    "memo, or PDF, always use create_document rather than just putting the content in a chat reply. If the " +
+    "CEO asks you to generate, create, draw, or make an image, logo, or picture, always use generate_image " +
+    "rather than describing what the image would look like in text. Be concise, direct, and decision-useful. " +
+    "When you're done, give one clear final answer." +
     buildMemoryBlock()
   );
 }
