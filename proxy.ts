@@ -16,7 +16,11 @@ export function proxy(req: NextRequest) {
     // or another device without a session cookie.
     pathname.startsWith("/api/files/download/") ||
     pathname.startsWith("/_next") ||
-    pathname === "/favicon.ico"
+    pathname.startsWith("/icons/") ||
+    pathname === "/favicon.ico" ||
+    pathname === "/icon.png" ||
+    pathname === "/apple-icon.png" ||
+    pathname === "/manifest.json"
   ) {
     return NextResponse.next();
   }
