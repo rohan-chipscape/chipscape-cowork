@@ -318,6 +318,18 @@ export function AgentTurnView({
               </div>
             );
           }
+          if (step.status === "done" || step.status === "approved") {
+            // Finished, but the result didn't come back in the expected
+            // shape — show whatever we have rather than spinning forever.
+            return (
+              <div
+                key={step.id}
+                className="whitespace-pre-wrap break-words rounded-2xl bg-[#2f2f2f] px-4 py-3 text-xs text-neutral-400"
+              >
+                {step.result}
+              </div>
+            );
+          }
           return (
             <BusyStatus
               key={step.id}

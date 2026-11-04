@@ -117,7 +117,7 @@ export function useAgentChat() {
           steps: t.steps.map((s) => {
             const match = execData.results.find((r: { id: string }) => r.id === s.id);
             if (!match) return s;
-            return { ...s, status: "done", result: JSON.stringify(match.result).slice(0, 2000) };
+            return { ...s, status: "done", result: JSON.stringify(match.result).slice(0, 50000) };
           }),
         }));
       }
@@ -216,7 +216,7 @@ export function useAgentChat() {
           return {
             ...s,
             status: s.status === "denied" ? "denied" : "done",
-            result: JSON.stringify(match.result).slice(0, 2000),
+            result: JSON.stringify(match.result).slice(0, 50000),
           };
         }),
       }));
