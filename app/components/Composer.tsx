@@ -1,6 +1,6 @@
 "use client";
 
-import { RefObject } from "react";
+import { RefObject, useEffect, useRef } from "react";
 import { AttachIcon, SendIcon, CloseIcon, MicIcon, StopIcon } from "@/app/components/icons";
 import { useSpeechInput } from "@/lib/speech/useSpeechInput";
 
@@ -30,6 +30,16 @@ export function Composer({
   onFileSelected: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   const speech = useSpeechInput(onInputChange);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Textarea doesn't grow on its own as you type/paste — without this, long
+  // prompts stay clipped to one line instead of expanding like ChatGPT's.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [input]);
 
   return (
     <form onSubmit={onSubmit} className="mx-auto flex w-full max-w-3xl flex-col gap-2">
@@ -73,6 +83,7 @@ export function Composer({
           <AttachIcon className="h-5 w-5" />
         </button>
         <textarea
+          ref={textareaRef}
           value={input}
           onChange={(e) => onInputChange(e.target.value)}
           onKeyDown={(e) => {
@@ -85,7 +96,7 @@ export function Composer({
           placeholder={
             speech.recording ? "Listening…" : "Ask anything, or ask it to do something…"
           }
-          className="max-h-40 flex-1 resize-none bg-transparent py-2 text-sm text-neutral-100 outline-none placeholder:text-neutral-500"
+          className="max-h-64 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-sm text-neutral-100 outline-none placeholder:text-neutral-500"
         />
         <button
           type="button"

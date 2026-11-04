@@ -28,11 +28,22 @@ export async function POST(req: Request) {
         };
       }
 
-      let args: Record<string, unknown> = {};
+      let args: Record<string, unknown>;
       try {
         args = JSON.parse(call.arguments || "{}");
       } catch {
-        // malformed arguments from the model — pass through empty args
+        // Malformed JSON almost always means the model's response got cut
+        // off mid-generation (e.g. a long document hitting the token
+        // limit) — surface that clearly instead of silently falling back
+        // to {} and producing an empty document/result.
+        return {
+          id: call.id,
+          name: call.name,
+          result: {
+            error:
+              "The response got cut off before it finished (likely too long for one step). Try asking again, perhaps for a shorter or more focused version.",
+          },
+        };
       }
 
       try {

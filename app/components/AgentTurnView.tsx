@@ -333,6 +333,30 @@ export function AgentTurnView({
           );
         }
 
+        if (step.name === "create_document") {
+          const result = step.result ? safeParse(step.result) : null;
+          if (result?.error) {
+            return (
+              <div key={step.id} className="rounded-2xl bg-[#2f2f2f] px-4 py-3 text-sm text-red-300">
+                {result.error}
+              </div>
+            );
+          }
+          if (result?.download_url) {
+            return (
+              <DocumentPreview key={step.id} filename={result.filename} downloadUrl={result.download_url} />
+            );
+          }
+          return (
+            <BusyStatus
+              key={step.id}
+              label="Writing the document…"
+              errorLabel="Couldn't create the document."
+              status={step.status}
+            />
+          );
+        }
+
         return (
         <div
           key={step.id}
@@ -370,19 +394,10 @@ export function AgentTurnView({
               {prettyArgs(step.name, step.args)}
             </pre>
           )}
-          {step.name === "create_document" && step.result && safeParse(step.result)?.download_url ? (
-            <div className="mt-2">
-              <DocumentPreview
-                filename={safeParse(step.result).filename}
-                downloadUrl={safeParse(step.result).download_url}
-              />
-            </div>
-          ) : (
-            step.result && (
-              <p className="mt-2 whitespace-pre-wrap break-words text-xs text-neutral-500">
-                {step.result}
-              </p>
-            )
+          {step.result && (
+            <p className="mt-2 whitespace-pre-wrap break-words text-xs text-neutral-500">
+              {step.result}
+            </p>
           )}
         </div>
         );

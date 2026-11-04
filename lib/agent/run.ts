@@ -33,7 +33,10 @@ export async function runAgentStep(
 
   const res = await client.chat.completions.create({
     model,
-    max_completion_tokens: 1500,
+    // A document/report's full body has to fit in a single tool-call
+    // argument — 1500 was cutting long documents off mid-generation,
+    // producing invalid JSON that silently fell back to an empty document.
+    max_completion_tokens: 8000,
     tools: getAgentTools(sessionEmail),
     tool_choice: "auto",
     messages: [
