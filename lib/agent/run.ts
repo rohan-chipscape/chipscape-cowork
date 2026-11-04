@@ -60,9 +60,20 @@ export async function runAgentStep(
   return { type: "final", text: message?.content ?? "" };
 }
 
+// Explicit requests to search/research/look something up are an unambiguous
+// signal for Agent mode — don't leave these to the LLM classifier's
+// judgment call, since it occasionally misfires on identically-intentioned
+// phrasing. This is checked before the LLM call, not instead of it.
+const EXPLICIT_RESEARCH_PATTERN =
+  /\b(do(ing)?\s+(a\s+|some\s+)?rese?a?search|rese?a?search\s+(this|that|it)|search\s+(the\s+)?(web|online|internet)|search\s+for|look\s+(it\s+)?up|look\s+up|find\s+out|browse\s+the\s+web|google\s+(it|this|that))\b/i;
+
 export async function classifyIntent(
   question: string
 ): Promise<"agent" | "debate"> {
+  if (EXPLICIT_RESEARCH_PATTERN.test(question)) {
+    return "agent";
+  }
+
   const { client, model } = getAgentClient();
 
   const res = await client.chat.completions.create({

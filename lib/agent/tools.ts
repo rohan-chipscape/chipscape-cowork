@@ -308,10 +308,13 @@ export function getAgentSystemPrompt(sessionEmail: string | null): string {
     "and you'll see its result right away. Use tools only when they're actually needed to answer accurately " +
     "or complete the task — for a question you can answer directly from your own knowledge, just answer " +
     "directly without calling a tool. When a question needs a specific, current fact or number (a price, a " +
-    "score, a statistic, today's data), don't settle for a vague search snippet — use web_fetch on the most " +
-    "relevant result to pull the exact figure before answering. If a web_fetch call errors out or a search " +
-    "doesn't nail it down, don't give up or hedge — try fetching a different result from the same search, or " +
-    "run another search with a more specific query, before concluding you can't find it. If the " +
+    "score, a statistic, today's data), don't settle for a vague snippet — web_search results each include a " +
+    "longer extracted `content` field (and sometimes a synthesized `answer`), which usually has the precise " +
+    "figure already; read those closely before reaching for web_fetch, since web_fetch is a plain HTTP request " +
+    "that can't render JavaScript and will come back empty on many modern pages (finance/data dashboards " +
+    "especially). If a web_fetch call errors out or a search doesn't nail it down, don't give up or hedge — " +
+    "try a different result from the same search, or run another search with a more specific query, before " +
+    "concluding you can't find it. If the " +
     "CEO asks you to write, draft, or give them a document, report, memo, or PDF, always use create_document " +
     "rather than just putting the content in a chat reply. If the CEO asks you to generate, create, draw, or " +
     "make an image, logo, or picture, always use generate_image rather than describing what the image would " +

@@ -406,6 +406,11 @@ export function AgentTurnView({
 
       {turn.finalText && (
         <div className="flex flex-col gap-1.5">
+          {turn.steps.some(
+            (s) =>
+              (s.name === "web_search" || s.name === "web_fetch") &&
+              !safeParse(s.result ?? "")?.error
+          ) && <p className="px-1 text-xs text-neutral-500">🔍 Searched the web</p>}
           <div className="px-1 text-neutral-100">
             <Markdown text={turn.finalText} />
           </div>

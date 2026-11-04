@@ -30,6 +30,14 @@ export async function webSearch(query: string) {
         query,
         max_results: 8,
         search_depth: "advanced",
+        // Tavily does its own page rendering/extraction server-side, which
+        // handles JS-heavy pages our own web_fetch can't (it's a plain HTTP
+        // fetch with no JS execution). Pulling the fuller extracted content
+        // here means the model often doesn't need a separate web_fetch call
+        // at all, and include_answer gives a RAG-tuned synthesized answer
+        // from the top sources as an extra signal.
+        include_raw_content: true,
+        include_answer: true,
       }),
       signal: AbortSignal.timeout(15000),
     });
@@ -43,8 +51,12 @@ export async function webSearch(query: string) {
       title: r.title,
       url: r.url,
       snippet: cleanSnippet(r.content ?? ""),
+      content: r.raw_content ? cleanSnippet(r.raw_content).slice(0, 3000) : undefined,
     }));
-    return { results };
+    return {
+      answer: data.answer ? cleanSnippet(data.answer) : undefined,
+      results,
+    };
   } catch (err) {
     return { error: err instanceof Error ? err.message : String(err) };
   }
