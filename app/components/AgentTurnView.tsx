@@ -169,14 +169,39 @@ function DocumentPreview({ filename, downloadUrl }: { filename: string; download
 
 function ImagePreview({ filename, downloadUrl }: { filename: string; downloadUrl: string }) {
   return (
-    <a href={downloadUrl} target="_blank" rel="noopener noreferrer" className="block">
+    <div className="relative inline-block max-w-full">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={downloadUrl}
         alt={filename}
-        className="max-h-80 rounded-lg border border-white/10 object-contain"
+        className="max-h-96 rounded-2xl border border-white/10 object-contain"
       />
-    </a>
+      <a
+        href={downloadUrl}
+        download={filename}
+        title="Download"
+        className="absolute bottom-2 right-2 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur hover:bg-black/80"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M12 3v12m0 0-4-4m4 4 4-4M4 21h16" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </a>
+    </div>
+  );
+}
+
+function ImageGeneratingStatus({ status }: { status: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-2xl bg-[#2f2f2f] px-4 py-3 text-sm text-neutral-400">
+      {status === "error" ? (
+        "Couldn't generate the image."
+      ) : (
+        <>
+          <span className="h-3 w-3 animate-spin rounded-full border-2 border-neutral-500 border-t-transparent" />
+          Generating image…
+        </>
+      )}
+    </div>
   );
 }
 
@@ -210,6 +235,20 @@ export function AgentTurnView({
     <div className="flex flex-col gap-3">
       {turn.steps.map((step) => {
         const args = safeParse(step.args);
+
+        if (step.name === "generate_image") {
+          const result = step.result ? safeParse(step.result) : null;
+          return result?.download_url ? (
+            <ImagePreview
+              key={step.id}
+              filename={result.filename}
+              downloadUrl={result.download_url}
+            />
+          ) : (
+            <ImageGeneratingStatus key={step.id} status={step.status} />
+          );
+        }
+
         return (
         <div
           key={step.id}
@@ -250,13 +289,6 @@ export function AgentTurnView({
           {step.name === "create_document" && step.result && safeParse(step.result)?.download_url ? (
             <div className="mt-2">
               <DocumentPreview
-                filename={safeParse(step.result).filename}
-                downloadUrl={safeParse(step.result).download_url}
-              />
-            </div>
-          ) : step.name === "generate_image" && step.result && safeParse(step.result)?.download_url ? (
-            <div className="mt-2">
-              <ImagePreview
                 filename={safeParse(step.result).filename}
                 downloadUrl={safeParse(step.result).download_url}
               />
