@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   /* config options here */
   output: "standalone",
-  serverExternalPackages: ["ffmpeg-static", "pdfkit", "tesseract.js", "canvas", "pdfjs-dist"],
+  serverExternalPackages: ["ffmpeg-static", "pdfkit", "tesseract.js", "pdfjs-dist"],
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

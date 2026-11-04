@@ -1,6 +1,6 @@
-// OCR for photos of documents and scanned (image-only) PDFs. Pure-JS/WASM
-// (tesseract.js) plus prebuilt-binary canvas/pdf rendering (no system
-// packages like poppler/imagemagick needed in the Docker image).
+// OCR for photos of documents and scanned (image-only) PDFs. Entirely
+// pure-JS/WASM (tesseract.js, pngjs) — no native addons or system packages
+// (poppler/imagemagick/cairo) needed in the Docker image.
 const MAX_OCR_PAGES = 8; // scanned PDFs can be slow/expensive to OCR page-by-page
 
 export async function ocrImageBuffer(buffer: Buffer): Promise<string> {
@@ -16,68 +16,100 @@ export async function ocrImageBuffer(buffer: Buffer): Promise<string> {
   }
 }
 
+type PdfImageData = {
+  data: Uint8Array | Uint8ClampedArray;
+  width: number;
+  height: number;
+  kind: number; // pdfjs ImageKind: 1=GRAYSCALE_1BPP, 2=RGB_24BPP, 3=RGBA_32BPP
+};
+
 /**
- * pdfjs-dist creates its own internal canvases while rendering (for image
- * XObjects, patterns, etc.), not just the one we hand it — if those use a
- * different/incompatible canvas implementation than ours, node-canvas
- * throws "Image or Canvas expected" deep inside native code. Passing this
- * factory (the pattern from pdfjs-dist's own Node examples) makes every
- * canvas pdfjs creates, anywhere, a real node-canvas one.
+ * Converts whatever pixel format pdfjs decoded the embedded scan into, into
+ * plain interleaved RGBA — the one format every PNG encoder understands.
  */
-class NodeCanvasFactory {
-  #createCanvas: (width: number, height: number) => import("canvas").Canvas;
+function toRGBA({ data, width, height, kind }: PdfImageData): Uint8Array {
+  const out = new Uint8Array(width * height * 4);
 
-  constructor(createCanvas: (width: number, height: number) => import("canvas").Canvas) {
-    this.#createCanvas = createCanvas;
+  if (kind === 3) {
+    // Already RGBA.
+    out.set(data.subarray(0, out.length));
+    return out;
   }
 
-  create(width: number, height: number) {
-    const canvas = this.#createCanvas(width, height);
-    return { canvas, context: canvas.getContext("2d") };
+  if (kind === 2) {
+    // RGB, no alpha — insert a fully-opaque alpha byte after every pixel.
+    for (let p = 0, s = 0; p < width * height; p++, s += 3) {
+      out[p * 4] = data[s];
+      out[p * 4 + 1] = data[s + 1];
+      out[p * 4 + 2] = data[s + 2];
+      out[p * 4 + 3] = 255;
+    }
+    return out;
   }
 
-  reset(canvasAndContext: { canvas: import("canvas").Canvas }, width: number, height: number) {
-    canvasAndContext.canvas.width = width;
-    canvasAndContext.canvas.height = height;
+  // GRAYSCALE_1BPP: one bit per pixel, packed 8-to-a-byte, each row padded
+  // to a whole byte — the classic bitonal fax-style scan format.
+  const bytesPerRow = Math.ceil(width / 8);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const byte = data[y * bytesPerRow + (x >> 3)];
+      const bit = (byte >> (7 - (x % 8))) & 1;
+      const v = bit ? 255 : 0;
+      const p = (y * width + x) * 4;
+      out[p] = v;
+      out[p + 1] = v;
+      out[p + 2] = v;
+      out[p + 3] = 255;
+    }
   }
-
-  destroy(canvasAndContext: { canvas: import("canvas").Canvas | null; context: unknown }) {
-    canvasAndContext.canvas!.width = 0;
-    canvasAndContext.canvas!.height = 0;
-    canvasAndContext.canvas = null;
-    canvasAndContext.context = null;
-  }
+  return out;
 }
 
-/** Renders each page of a (likely scanned, text-less) PDF to an image and OCRs it. */
+/**
+ * OCRs a scanned (text-less) PDF by pulling the embedded page-scan image(s)
+ * straight out of the PDF's own decoded objects — not by rendering pages
+ * through a Canvas2D implementation. pdfjs-dist's renderer calls Canvas
+ * methods real browsers support but Node canvas libraries implement
+ * incompletely or incompatibly (confirmed: both @napi-rs/canvas, which
+ * crashes the process natively, and node-canvas, which throws "Image or
+ * Canvas expected" on the same image XObjects). Going straight to the
+ * decoded pixel data sidesteps that whole rendering pipeline.
+ */
 export async function ocrScannedPdf(buffer: Buffer): Promise<string> {
   const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const { createCanvas } = await import("canvas");
-  const canvasFactory = new NodeCanvasFactory(createCanvas);
+  const { PNG } = await import("pngjs");
 
-  // pdfjs-dist's public .d.ts doesn't model the Node-specific canvasFactory
-  // option (it's documented and supported at runtime, in pdfjs-dist's own
-  // Node examples, just not typed), so this needs a cast past it.
-  const doc = await pdfjsLib.getDocument({
-    data: new Uint8Array(buffer),
-    canvasFactory,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any).promise;
+  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
   const pageCount = Math.min(doc.numPages, MAX_OCR_PAGES);
   const pageTexts: string[] = [];
 
   for (let i = 1; i <= pageCount; i++) {
     const page = await doc.getPage(i);
-    const viewport = page.getViewport({ scale: 2 }); // higher scale = better OCR accuracy
-    const { canvas, context } = canvasFactory.create(viewport.width, viewport.height);
+    // Building the operator list is what makes pdfjs actually decode each
+    // image XObject's pixels into page.objs — render() normally triggers
+    // this as a side effect of drawing, but we need the data, not a drawing.
+    const opList = await page.getOperatorList();
 
-    await page.render({
-      canvasContext: context,
-      viewport,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any).promise;
+    let imgData: PdfImageData | null = null;
+    for (let j = 0; j < opList.fnArray.length; j++) {
+      if (opList.fnArray[j] !== pdfjsLib.OPS.paintImageXObject) continue;
+      const objId = opList.argsArray[j][0] as string;
+      const data = await new Promise<PdfImageData | null>((resolve) => page.objs.get(objId, resolve));
+      if (data?.data) {
+        imgData = data; // a scanned page is normally exactly one full-page image
+        break;
+      }
+    }
 
-    const pngBuffer = canvas.toBuffer("image/png");
+    if (!imgData) {
+      pageTexts.push(`## Page ${i}\n[No embedded scan image found on this page.]`);
+      continue;
+    }
+
+    const png = new PNG({ width: imgData.width, height: imgData.height });
+    png.data = Buffer.from(toRGBA(imgData));
+    const pngBuffer = PNG.sync.write(png);
+
     const text = await ocrImageBuffer(pngBuffer);
     pageTexts.push(`## Page ${i}\n${text.trim()}`);
   }
