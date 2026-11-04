@@ -256,6 +256,22 @@ function SearchResultsPreview({
   );
 }
 
+function FetchedPagePreview({ url, text }: { url: string; text: string }) {
+  return (
+    <div className="rounded-2xl bg-[#2f2f2f] px-4 py-3">
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block truncate text-xs font-medium text-[#5b9bff] hover:underline"
+      >
+        {url}
+      </a>
+      <p className="mt-2 line-clamp-6 whitespace-pre-wrap text-xs text-neutral-400">{text}</p>
+    </div>
+  );
+}
+
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     pending: "bg-amber-900/40 text-amber-300",
@@ -335,6 +351,40 @@ export function AgentTurnView({
               key={step.id}
               label="Searching the web…"
               errorLabel="Couldn't search the web."
+              status={step.status}
+            />
+          );
+        }
+
+        if (step.name === "web_fetch") {
+          const result = step.result ? safeParse(step.result) : null;
+          if (result?.text) {
+            return (
+              <FetchedPagePreview key={step.id} url={result.url ?? args?.url ?? ""} text={result.text} />
+            );
+          }
+          if (result?.error) {
+            return (
+              <div key={step.id} className="rounded-2xl bg-[#2f2f2f] px-4 py-3 text-sm text-red-300">
+                {result.error}
+              </div>
+            );
+          }
+          if (step.status === "done" || step.status === "approved") {
+            return (
+              <div
+                key={step.id}
+                className="whitespace-pre-wrap break-words rounded-2xl bg-[#2f2f2f] px-4 py-3 text-xs text-neutral-400"
+              >
+                {step.result}
+              </div>
+            );
+          }
+          return (
+            <BusyStatus
+              key={step.id}
+              label="Reading the page…"
+              errorLabel="Couldn't read that page."
               status={step.status}
             />
           );
