@@ -7,10 +7,7 @@ import { saveGeneratedFile, sanitizeFilename } from "./generatedFiles";
  * Enterprise Agent Platform" project, not a plain Developer API key like
  * ours — this model works with the regular GEMINI_API_KEY.)
  */
-export async function generateImage(
-  prompt: string,
-  title?: string
-): Promise<{ id: string; filename: string }> {
+export async function generateImageBuffer(prompt: string): Promise<Buffer> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY is not set.");
 
@@ -26,7 +23,14 @@ export async function generateImage(
     throw new Error("Gemini didn't return an image for that prompt.");
   }
 
-  const buffer = Buffer.from(imagePart.inlineData.data, "base64");
+  return Buffer.from(imagePart.inlineData.data, "base64");
+}
+
+export async function generateImage(
+  prompt: string,
+  title?: string
+): Promise<{ id: string; filename: string }> {
+  const buffer = await generateImageBuffer(prompt);
   const { id } = saveGeneratedFile(buffer, "png");
   const filename = `${sanitizeFilename(title ?? prompt.slice(0, 60))}.png`;
   return { id, filename };

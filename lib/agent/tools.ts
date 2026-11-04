@@ -80,10 +80,18 @@ const BASE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
     function: {
       name: "create_document",
       description:
-        "Create a downloadable PDF document — use this whenever the user asks you to write, generate, " +
-        "draft, or give them a document, report, memo, or PDF, instead of just replying with the content " +
-        "as a chat message. Supports simple formatting in `content`: lines starting with '# ' or '## ' " +
-        "become headings, and lines starting with '- ' become bullet points.",
+        "Create a downloadable PDF document — use this whenever the CEO asks you to write, generate, " +
+        "draft, or give them a document, report, memo, proposal, or PDF, instead of just replying with the " +
+        "content as a chat message. Supports real formatting in `content`: lines starting with '# ' or '## ' " +
+        "become headings, lines starting with '- ' or '* ' become bullet points, and a GitHub-style markdown " +
+        "table (a header row, a separator row of dashes like '|---|---|', then data rows, all using '|' to " +
+        "separate columns) renders as an actual bordered table — always use this for a Bill of Materials, a " +
+        "pricing/cost breakdown, a comparison, or any other tabular data, never as a bulleted list. To include " +
+        "a diagram (network/architecture diagram, system overview, flow chart), put a line by itself exactly " +
+        "like '[DIAGRAM: a detailed description of exactly what the diagram should show]' at the point in the " +
+        "document where it belongs — it's generated and embedded as an image automatically. A proposal-style " +
+        "document reads much better with at least one table (e.g. the Bill of Materials / costing section) " +
+        "and, when a technical architecture is being described, a diagram — don't flatten those into plain text.",
       parameters: {
         type: "object",
         properties: {

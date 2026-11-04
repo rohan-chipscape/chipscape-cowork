@@ -2,7 +2,10 @@ import { executeTool } from "@/lib/agent/tools";
 import type { AgentToolCall } from "@/lib/agent/types";
 import { getSessionEmail } from "@/lib/auth/session";
 
-export const maxDuration = 60;
+// A document with one or more [DIAGRAM: ...] markers calls the image model
+// once per diagram before the PDF can finish rendering, so this needs more
+// headroom than a typical tool call.
+export const maxDuration = 120;
 
 type Body = {
   calls: AgentToolCall[];
