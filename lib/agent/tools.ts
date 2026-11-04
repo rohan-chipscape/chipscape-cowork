@@ -15,8 +15,28 @@ import { getAccountTokens } from "@/lib/google/accountStore";
 import { buildMemoryBlock } from "@/lib/memory/context";
 import { createPdfDocument } from "@/lib/files/generateDocument";
 import { generateImage } from "@/lib/files/generateImage";
+import { getStockQuote } from "@/lib/tools/stockQuote";
 
 const BASE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
+  {
+    type: "function",
+    function: {
+      name: "get_stock_quote",
+      description:
+        "Get an exact, exchange-sourced stock quote — current price, day high/low, previous close, percent " +
+        "change, and the last few days' open/high/low/close — for a publicly traded company. ALWAYS use this " +
+        "instead of web_search for any stock price, share price, or market question; it reads directly from a " +
+        "live market data feed (the same kind of source a brokerage app uses), not a scraped page, so it's " +
+        "exact rather than an approximation from a search snippet.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Company name or ticker symbol, e.g. 'Jio Platforms' or 'AAPL'." },
+        },
+        required: ["query"],
+      },
+    },
+  },
   {
     type: "function",
     function: {
@@ -261,6 +281,8 @@ export async function executeTool(
   }
 
   switch (name) {
+    case "get_stock_quote":
+      return getStockQuote(String(args.query ?? ""));
     case "web_search":
       return webSearch(String(args.query ?? ""));
     case "web_fetch":
@@ -298,17 +320,21 @@ export function getAgentSystemPrompt(sessionEmail: string | null): string {
     : "Gmail/Calendar/Drive tools aren't available — this account isn't connected to Google.";
 
   return (
-    "You are an agentic assistant working directly for a CEO. You can call tools to search the web, " +
-    "fetch specific pages, run short JavaScript calculations, create a downloadable PDF document, generate " +
-    "an image from a text description, and — " +
+    "You are an agentic assistant working directly for a CEO. You can call tools to get an exact stock quote, " +
+    "search the web, fetch specific pages, run short JavaScript calculations, create a downloadable PDF " +
+    "document, generate an image from a text description, and — " +
     `when connected — search/read/send Gmail, list/create Google Calendar events, and search/read Google ` +
     `Drive files. ${accountsNote} ` +
     "Sending an email or creating a calendar event is shown to the CEO for approval before it runs; every " +
     "other tool (search, fetch, document/image generation, reading Gmail/Calendar/Drive) runs immediately " +
     "and you'll see its result right away. Use tools only when they're actually needed to answer accurately " +
     "or complete the task — for a question you can answer directly from your own knowledge, just answer " +
-    "directly without calling a tool. When a question needs a specific, current fact or number (a price, a " +
-    "score, a statistic, today's data), don't settle for a vague snippet — web_search results each include a " +
+    "directly without calling a tool. For ANY question about a stock or share price, always call " +
+    "get_stock_quote first — it's an exact, exchange-sourced number (the same kind of feed a brokerage app " +
+    "uses), not an approximation from a scraped page. Only fall back to web_search for stock questions if " +
+    "get_stock_quote errors out (e.g. the company isn't resolvable to a ticker). When a question needs some " +
+    "other specific, current fact or number (a score, a statistic, today's data), don't settle for a vague " +
+    "snippet — web_search results each include a " +
     "longer extracted `content` field (and sometimes a synthesized `answer`), which usually has the precise " +
     "figure already; read those closely before reaching for web_fetch, since web_fetch is a plain HTTP request " +
     "that can't render JavaScript and will come back empty on many modern pages (finance/data dashboards " +

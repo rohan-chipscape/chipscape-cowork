@@ -6,6 +6,7 @@ import { CopyButton } from "@/app/components/CopyButton";
 import { SIDE_EFFECT_TOOLS } from "@/lib/agent/types";
 
 const TOOL_LABELS: Record<string, string> = {
+  get_stock_quote: "Get a stock quote",
   web_search: "Search the web",
   web_fetch: "Fetch a web page",
   run_js: "Run JavaScript",
@@ -263,6 +264,28 @@ export function AgentTurnView({
           );
         }
 
+        if (step.name === "get_stock_quote") {
+          const result = step.result ? safeParse(step.result) : null;
+          if (result?.error) {
+            return (
+              <div key={step.id} className="rounded-2xl bg-[#2f2f2f] px-4 py-3 text-sm text-red-300">
+                {result.error}
+              </div>
+            );
+          }
+          if (result?.currentPrice !== undefined || step.status === "done" || step.status === "approved") {
+            return null;
+          }
+          return (
+            <BusyStatus
+              key={step.id}
+              label="Checking the live quote…"
+              errorLabel="Couldn't get a stock quote."
+              status={step.status}
+            />
+          );
+        }
+
         if (step.name === "web_search") {
           const result = step.result ? safeParse(step.result) : null;
           if (result?.error) {
@@ -408,7 +431,7 @@ export function AgentTurnView({
         <div className="flex flex-col gap-1.5">
           {turn.steps.some(
             (s) =>
-              (s.name === "web_search" || s.name === "web_fetch") &&
+              (s.name === "web_search" || s.name === "web_fetch" || s.name === "get_stock_quote") &&
               !safeParse(s.result ?? "")?.error
           ) && <p className="px-1 text-xs text-neutral-500">🔍 Searched the web</p>}
           <div className="px-1 text-neutral-100">
