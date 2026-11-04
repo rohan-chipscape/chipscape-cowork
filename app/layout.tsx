@@ -15,6 +15,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Chipscape Cowork",
   description: "Multi-model AI panel assistant",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Cowork",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
