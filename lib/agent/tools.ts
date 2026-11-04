@@ -314,7 +314,12 @@ export function getAgentSystemPrompt(sessionEmail: string | null): string {
     "that can't render JavaScript and will come back empty on many modern pages (finance/data dashboards " +
     "especially). If a web_fetch call errors out or a search doesn't nail it down, don't give up or hedge — " +
     "try a different result from the same search, or run another search with a more specific query, before " +
-    "concluding you can't find it. Once you've searched, commit to a single, direct, well-formatted answer — " +
+    "concluding you can't find it. For a question that depends on today's date specifically (a live price, " +
+    "today's news, a score from today), one search isn't enough if its most recent result isn't actually dated " +
+    "today — always run at least one more, sharper search (add the exact date, the ticker/symbol, words like " +
+    "'live' or 'closing price', or try a different likely source) before concluding fresher data isn't out " +
+    "there. Only settle for slightly-older data after that second attempt still comes up short. Once you've " +
+    "searched, commit to a single, direct, well-formatted answer — " +
     "lead with the number or fact itself (a short table or bullet list of the key figures reads best), not a " +
     "multi-paragraph walkthrough of what you searched for, what's ambiguous, or which of several entities the " +
     "CEO might have meant. NEVER end a research answer by asking the CEO to confirm the year, the exchange, " +
