@@ -1,3 +1,17 @@
+// Tavily's "content" is a raw scraped excerpt of the page, which often
+// carries Markdown artifacts (heading hashes, bold/italic markers, link
+// brackets) from the source HTML. Strip those so the snippet reads as plain
+// text instead of leaking "### Heading" or "**bold**" into the UI.
+function cleanSnippet(text: string): string {
+  return text
+    .replace(/^#{1,6}\s*/gm, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export async function webSearch(query: string) {
   const apiKey = process.env.TAVILY_API_KEY;
   if (!apiKey) {
@@ -28,7 +42,7 @@ export async function webSearch(query: string) {
     const results = (data.results ?? []).map((r: any) => ({
       title: r.title,
       url: r.url,
-      snippet: r.content,
+      snippet: cleanSnippet(r.content ?? ""),
     }));
     return { results };
   } catch (err) {
