@@ -198,11 +198,7 @@ export default function Home() {
     });
   }
 
-  async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-
+  async function processFile(file: File) {
     setUploading(true);
     setUploadError("");
     try {
@@ -220,6 +216,20 @@ export default function Home() {
     } finally {
       setUploading(false);
     }
+  }
+
+  async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    await processFile(file);
+  }
+
+  // Same flow as attaching via the picker, but for a file (or a pasted
+  // screenshot/copied image) dropped straight into the composer — matches
+  // ChatGPT's paste-to-attach behavior.
+  function handleFilePasted(file: File) {
+    void processFile(file);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -316,6 +326,7 @@ export default function Home() {
                 uploadError={uploadError}
                 fileInputRef={fileInputRef}
                 onFileSelected={handleFileSelected}
+                onFilePasted={handleFilePasted}
               />
             </div>
           </div>
@@ -406,6 +417,7 @@ export default function Home() {
             uploadError={uploadError}
             fileInputRef={fileInputRef}
             onFileSelected={handleFileSelected}
+            onFilePasted={handleFilePasted}
           />
         </div>
         </>

@@ -17,6 +17,7 @@ export function Composer({
   uploadError,
   fileInputRef,
   onFileSelected,
+  onFilePasted,
 }: {
   input: string;
   onInputChange: (value: string) => void;
@@ -28,6 +29,7 @@ export function Composer({
   uploadError: string;
   fileInputRef: RefObject<HTMLInputElement | null>;
   onFileSelected: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onFilePasted: (file: File) => void;
 }) {
   const speech = useSpeechInput(onInputChange);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -90,6 +92,24 @@ export function Composer({
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               onSubmit(e as unknown as React.FormEvent);
+            }
+          }}
+          onPaste={(e) => {
+            // A copied file (from Finder/Explorer) or a copied/screenshotted
+            // image shows up as a "file" item here — attach it the same way
+            // the picker does, instead of letting the browser try to paste
+            // it as text. Falls through to normal text paste otherwise.
+            const items = e.clipboardData?.items;
+            if (!items) return;
+            for (const item of items) {
+              if (item.kind === "file") {
+                const file = item.getAsFile();
+                if (file) {
+                  e.preventDefault();
+                  onFilePasted(file);
+                  return;
+                }
+              }
             }
           }}
           rows={1}
