@@ -133,7 +133,7 @@ export default function Home() {
     debate.reset();
     agent.reset();
     setInput("");
-    setAttachment(null);
+    removeAttachment();
     sharedMemory.current = [];
     memorizedTurnIds.current = new Set();
     stickToBottom.current = true;
@@ -198,7 +198,22 @@ export default function Home() {
     });
   }
 
+  function removeAttachment() {
+    setAttachment((prev) => {
+      if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+      return null;
+    });
+  }
+
   async function processFile(file: File) {
+    // Images get an actual thumbnail (like ChatGPT) instead of a generic
+    // file chip — the object URL is local/instant, available even while
+    // the upload is still in flight.
+    const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
+    setAttachment((prev) => {
+      if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+      return null;
+    });
     setUploading(true);
     setUploadError("");
     try {
@@ -208,11 +223,13 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) {
         setUploadError(data.error ?? "Upload failed");
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
       } else {
-        setAttachment({ name: data.name, text: data.text });
+        setAttachment({ name: data.name, text: data.text, previewUrl });
       }
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : String(err));
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
     } finally {
       setUploading(false);
     }
@@ -247,7 +264,7 @@ export default function Home() {
           q || "Summarize this file and call out anything notable."
         }`
       : q;
-    setAttachment(null);
+    removeAttachment();
 
     setClassifying(true);
     let mode: "agent" | "debate" = "debate";
@@ -321,7 +338,7 @@ export default function Home() {
                 onSubmit={handleSubmit}
                 isBusy={isBusy}
                 attachment={attachment}
-                onRemoveAttachment={() => setAttachment(null)}
+                onRemoveAttachment={removeAttachment}
                 uploading={uploading}
                 uploadError={uploadError}
                 fileInputRef={fileInputRef}
@@ -412,7 +429,7 @@ export default function Home() {
             onSubmit={handleSubmit}
             isBusy={isBusy}
             attachment={attachment}
-            onRemoveAttachment={() => setAttachment(null)}
+            onRemoveAttachment={removeAttachment}
             uploading={uploading}
             uploadError={uploadError}
             fileInputRef={fileInputRef}

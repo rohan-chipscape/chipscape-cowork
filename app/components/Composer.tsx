@@ -4,7 +4,7 @@ import { RefObject, useEffect, useRef } from "react";
 import { AttachIcon, SendIcon, CloseIcon, MicIcon, StopIcon } from "@/app/components/icons";
 import { useSpeechInput } from "@/lib/speech/useSpeechInput";
 
-export type Attachment = { name: string; text: string };
+export type Attachment = { name: string; text: string; previewUrl?: string };
 
 export function Composer({
   input,
@@ -54,8 +54,20 @@ export function Composer({
           )}
           {speech.error && <span className="text-red-400">{speech.error}</span>}
           {attachment && !uploading && (
-            <span className="flex items-center gap-2 rounded-full bg-[#2f2f2f] px-3 py-1 text-neutral-300">
-              📎 {attachment.name}
+            <span className="flex items-center gap-2 rounded-xl bg-[#2f2f2f] py-1 pl-1 pr-2 text-neutral-300">
+              {attachment.previewUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={attachment.previewUrl}
+                  alt={attachment.name}
+                  className="h-8 w-8 rounded-lg object-cover"
+                />
+              ) : (
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1f1f1f] text-base">
+                  📄
+                </span>
+              )}
+              <span className="max-w-[180px] truncate text-xs">{attachment.name}</span>
               <button
                 type="button"
                 onClick={onRemoveAttachment}
