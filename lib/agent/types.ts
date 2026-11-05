@@ -5,7 +5,11 @@ export type AgentToolCall = {
 };
 
 export type AgentMessage =
-  | { role: "user"; content: string }
+  // imageDataUrl: an actual image (base64 data URL) attached to this turn,
+  // sent to the model as real vision input — not just the OCR'd text in
+  // `content` — so questions about a photo/chart/diagram can be answered
+  // from what's actually in the image.
+  | { role: "user"; content: string; imageDataUrl?: string }
   | { role: "assistant"; content: string | null; tool_calls?: AgentToolCall[] }
   | { role: "tool"; tool_call_id: string; content: string };
 

@@ -21,6 +21,15 @@ function toOpenAIMessages(
     if (m.role === "tool") {
       return { role: "tool", tool_call_id: m.tool_call_id, content: m.content };
     }
+    if (m.imageDataUrl) {
+      return {
+        role: "user",
+        content: [
+          { type: "text", text: m.content },
+          { type: "image_url", image_url: { url: m.imageDataUrl } },
+        ],
+      };
+    }
     return { role: "user", content: m.content };
   });
 }

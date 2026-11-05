@@ -225,7 +225,12 @@ export default function Home() {
         setUploadError(data.error ?? "Upload failed");
         if (previewUrl) URL.revokeObjectURL(previewUrl);
       } else {
-        setAttachment({ name: data.name, text: data.text, previewUrl });
+        setAttachment({
+          name: data.name,
+          text: data.text,
+          previewUrl,
+          imageDataUrl: data.imageDataUrl,
+        });
       }
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : String(err));
@@ -259,25 +264,37 @@ export default function Home() {
     const displayQuestion = attachment
       ? `📎 ${attachment.name}${q ? `\n\n${q}` : ""}`
       : q;
+    const imageDataUrl = attachment?.imageDataUrl;
     const modelQuestion = attachment
-      ? `Attached file: ${attachment.name}\n"""\n${attachment.text}\n"""\n\n${
-          q || "Summarize this file and call out anything notable."
-        }`
+      ? imageDataUrl
+        ? q || "Look at the attached image and describe what's in it, answering anything specific I asked."
+        : `Attached file: ${attachment.name}\n"""\n${attachment.text}\n"""\n\n${
+            q || "Summarize this file and call out anything notable."
+          }`
       : q;
     removeAttachment();
 
+    // An attached image needs real vision (Agent mode's GPT-5.1 call) to
+    // actually be looked at — the Debate panel's providers only ever see
+    // plain text, so routing there would silently fall back to OCR'd text
+    // (or nothing, for a photo/chart with no text at all). Skip the
+    // classifier entirely in that case instead of leaving it to guess.
     setClassifying(true);
     let mode: "agent" | "debate" = "debate";
-    try {
-      const res = await fetch("/api/agent/classify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: modelQuestion }),
-      });
-      const data = await res.json();
-      if (data.mode === "agent") mode = "agent";
-    } catch {
-      // classification failure falls back to the safe debate mode
+    if (imageDataUrl) {
+      mode = "agent";
+    } else {
+      try {
+        const res = await fetch("/api/agent/classify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: modelQuestion }),
+        });
+        const data = await res.json();
+        if (data.mode === "agent") mode = "agent";
+      } catch {
+        // classification failure falls back to the safe debate mode
+      }
     }
     setClassifying(false);
 
@@ -289,7 +306,13 @@ export default function Home() {
 
     const priorHistory = sharedMemory.current;
     if (mode === "agent") {
-      await agent.ask(modelQuestion, addToOrder("agent"), displayQuestion, priorHistory);
+      await agent.ask(
+        modelQuestion,
+        addToOrder("agent"),
+        displayQuestion,
+        priorHistory,
+        imageDataUrl
+      );
     } else {
       await debate.ask(modelQuestion, addToOrder("debate"), displayQuestion, priorHistory);
     }

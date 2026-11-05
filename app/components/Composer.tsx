@@ -4,7 +4,12 @@ import { RefObject, useEffect, useRef } from "react";
 import { AttachIcon, SendIcon, CloseIcon, MicIcon, StopIcon } from "@/app/components/icons";
 import { useSpeechInput } from "@/lib/speech/useSpeechInput";
 
-export type Attachment = { name: string; text: string; previewUrl?: string };
+export type Attachment = {
+  name: string;
+  text: string;
+  previewUrl?: string;
+  imageDataUrl?: string;
+};
 
 export function Composer({
   input,

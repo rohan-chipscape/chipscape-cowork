@@ -145,12 +145,13 @@ export function useAgentChat() {
       question: string,
       onTurnCreated?: (id: string) => void,
       displayQuestion?: string,
-      priorHistory: HistoryMessage[] = []
+      priorHistory: HistoryMessage[] = [],
+      imageDataUrl?: string
     ) => {
       const turnId = crypto.randomUUID();
       transcripts.current[turnId] = [
         ...priorHistory,
-        { role: "user", content: question },
+        { role: "user", content: question, ...(imageDataUrl ? { imageDataUrl } : {}) },
       ];
 
       setIsBusy(true);
