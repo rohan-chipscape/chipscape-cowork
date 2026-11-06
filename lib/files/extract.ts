@@ -5,6 +5,42 @@ const MAX_CHARS = 20000;
 // almost certainly a scanned/image-only PDF rather than a real text layer.
 const MIN_TEXT_LAYER_CHARS = 30;
 
+function decodeXmlEntities(s: string): string {
+  return s
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+// .pptx is a zip of XML parts — no need for a full OOXML parser, just pull
+// the text runs (<a:t>...</a:t>) out of each slide's XML, in slide order.
+async function extractPptxText(buffer: Buffer): Promise<string> {
+  const JSZip = (await import("jszip")).default;
+  const zip = await JSZip.loadAsync(buffer);
+  const slidePaths = Object.keys(zip.files)
+    .filter((f) => /^ppt\/slides\/slide\d+\.xml$/.test(f))
+    .sort((a, b) => {
+      const na = parseInt(a.match(/slide(\d+)\.xml/)![1], 10);
+      const nb = parseInt(b.match(/slide(\d+)\.xml/)![1], 10);
+      return na - nb;
+    });
+
+  const slides: string[] = [];
+  for (const path of slidePaths) {
+    const xml = await zip.files[path].async("string");
+    const runs = [...xml.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((m) =>
+      decodeXmlEntities(m[1])
+    );
+    slides.push(runs.join(" ").trim());
+  }
+
+  return slides
+    .map((text, i) => `## Slide ${i + 1}\n${text || "(no text on this slide)"}`)
+    .join("\n\n");
+}
+
 export async function extractText(
   file: File
 ): Promise<{ text: string; error?: string }> {
@@ -42,6 +78,11 @@ export async function extractText(
       const mammoth = await import("mammoth");
       const { value } = await mammoth.extractRawText({ buffer });
       return { text: value.slice(0, MAX_CHARS) };
+    }
+
+    if (name.endsWith(".pptx")) {
+      const text = await extractPptxText(buffer);
+      return { text: text.slice(0, MAX_CHARS) };
     }
 
     if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
