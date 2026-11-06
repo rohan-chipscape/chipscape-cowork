@@ -3,18 +3,109 @@ import { saveGeneratedFile, sanitizeFilename } from "./generatedFiles";
 import { generateImageBuffer } from "./generateImage";
 
 /**
- * Very small markdown-ish renderer: enough to make agent-generated content
- * (headings, bullet lists, bold, tables, diagrams) look like a real document
- * rather than a wall of plain text, without pulling in a full
+ * Small markdown-ish renderer: enough to make agent-generated content
+ * (headings, bullet/numbered lists, bold/italic/code/links, tables,
+ * diagrams) look like a real document rather than a wall of plain text
+ * with stray '#'/'*' characters, without pulling in a full
  * markdown-to-PDF pipeline.
  */
 
+const ACCENT = "#2c67c5"; // same blue as the app's own send button
+const ACCENT_DARK = "#173e76"; // same navy as the app's user-message bubble
+const TEXT_COLOR = "#1a1a1a";
+const MUTED = "#666666";
+
+type InlineSegment = {
+  text: string;
+  bold?: boolean;
+  italic?: boolean;
+  code?: boolean;
+  link?: string;
+};
+
+// Splits a line into runs of plain/bold/italic/code/link text instead of
+// just deleting the markdown markers — so "**Important:**" actually renders
+// bold rather than silently losing the emphasis along with the asterisks.
+function parseInlineSegments(raw: string): InlineSegment[] {
+  const segments: InlineSegment[] = [];
+  const re = /`([^`]+)`|\[([^\]]+)\]\(([^)]+)\)|\*\*([^*]+)\*\*|\*([^*]+)\*/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(raw))) {
+    if (match.index > lastIndex) {
+      segments.push({ text: raw.slice(lastIndex, match.index) });
+    }
+    if (match[1] !== undefined) {
+      segments.push({ text: match[1], code: true });
+    } else if (match[2] !== undefined) {
+      segments.push({ text: match[2], link: match[3] });
+    } else if (match[4] !== undefined) {
+      segments.push({ text: match[4], bold: true });
+    } else if (match[5] !== undefined) {
+      segments.push({ text: match[5], italic: true });
+    }
+    lastIndex = re.lastIndex;
+  }
+  if (lastIndex < raw.length) segments.push({ text: raw.slice(lastIndex) });
+  return segments.length ? segments : [{ text: raw }];
+}
+
+// Flattened plain text for spots (table cells, diagram captions) where a
+// single text() call per position makes true inline styling impractical.
 function stripInlineMarkdown(text: string): string {
-  return text.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1");
+  return parseInlineSegments(text)
+    .map((s) => s.text)
+    .join("");
+}
+
+function fontFor(baseBold: boolean, seg: InlineSegment): string {
+  if (seg.code) return baseBold ? "Courier-Bold" : "Courier";
+  const bold = baseBold || seg.bold;
+  const italic = !!seg.italic;
+  if (bold && italic) return "Helvetica-BoldOblique";
+  if (bold) return "Helvetica-Bold";
+  if (italic) return "Helvetica-Oblique";
+  return "Helvetica";
+}
+
+// Renders a pre-built run of segments as one flowing paragraph, each run
+// keeping its own font/color but all continuing on the same line(s) —
+// this is what makes inline bold/italic/code/links actually look right
+// instead of just having their markup characters stripped out.
+function renderInlineSegments(
+  doc: PDFKit.PDFDocument,
+  segments: InlineSegment[],
+  opts: { size: number; color: string; baseBold?: boolean; indent?: number }
+) {
+  segments.forEach((seg, idx) => {
+    const isLast = idx === segments.length - 1;
+    doc.font(fontFor(!!opts.baseBold, seg)).fontSize(seg.code ? opts.size - 0.5 : opts.size);
+    doc.fillColor(seg.link ? ACCENT : opts.color);
+    const textOptions: PDFKit.Mixins.TextOptions = { continued: !isLast };
+    if (idx === 0 && opts.indent) textOptions.indent = opts.indent;
+    if (seg.link) {
+      textOptions.link = seg.link;
+      textOptions.underline = true;
+    }
+    doc.text(seg.text, textOptions);
+  });
+  doc.fillColor(TEXT_COLOR).font("Helvetica").fontSize(11);
+}
+
+function renderInlineText(
+  doc: PDFKit.PDFDocument,
+  raw: string,
+  opts: { size: number; color: string; baseBold?: boolean; indent?: number }
+) {
+  renderInlineSegments(doc, parseInlineSegments(raw), opts);
 }
 
 function isTableSeparator(line: string): boolean {
   return /^\|?[\s:|-]+\|?$/.test(line) && line.includes("-");
+}
+
+function isHorizontalRule(line: string): boolean {
+  return /^(-{3,}|_{3,}|\*{3,})$/.test(line);
 }
 
 function parseTableRow(line: string): string[] {
@@ -55,14 +146,21 @@ function renderTable(doc: PDFKit.PDFDocument, rows: string[][]) {
     const startX = doc.page.margins.left;
 
     if (isHeader) {
-      doc.rect(startX, startY, contentWidth, rowHeight).fill("#f0f0f0");
-      doc.fillColor("#000000");
+      doc.rect(startX, startY, contentWidth, rowHeight).fill(ACCENT);
+      doc.fillColor("#ffffff");
+    } else if (rowIndex % 2 === 0) {
+      // Faint zebra striping on data rows reads much cleaner than a wall of
+      // identical white rows once a table runs past a handful of entries.
+      doc.rect(startX, startY, contentWidth, rowHeight).fill("#f6f8fb");
+      doc.fillColor(TEXT_COLOR);
+    } else {
+      doc.fillColor(TEXT_COLOR);
     }
 
     row.forEach((cell, i) => {
       const x = startX + i * colWidth;
-      doc.rect(x, startY, colWidth, rowHeight).stroke("#cccccc");
-      doc.text(cell, x + cellPadding, startY + cellPadding, {
+      doc.rect(x, startY, colWidth, rowHeight).stroke("#d8dde3");
+      doc.fillColor(isHeader ? "#ffffff" : TEXT_COLOR).text(cell, x + cellPadding, startY + cellPadding, {
         width: colWidth - cellPadding * 2,
       });
     });
@@ -76,7 +174,7 @@ function renderTable(doc: PDFKit.PDFDocument, rows: string[][]) {
   });
 
   doc.moveDown(0.5);
-  doc.font("Helvetica").fontSize(11);
+  doc.fillColor(TEXT_COLOR).font("Helvetica").fontSize(11);
 }
 
 async function renderDiagram(doc: PDFKit.PDFDocument, description: string) {
@@ -95,9 +193,9 @@ async function renderDiagram(doc: PDFKit.PDFDocument, description: string) {
     doc
       .font("Helvetica-Oblique")
       .fontSize(9)
-      .fillColor("#666666")
+      .fillColor(MUTED)
       .text(description, { align: "center" });
-    doc.fillColor("#000000").font("Helvetica").fontSize(11);
+    doc.fillColor(TEXT_COLOR).font("Helvetica").fontSize(11);
     doc.moveDown(0.5);
   } catch {
     doc
@@ -105,7 +203,7 @@ async function renderDiagram(doc: PDFKit.PDFDocument, description: string) {
       .fontSize(10)
       .fillColor("#999999")
       .text(`[Diagram could not be generated: ${description}]`);
-    doc.fillColor("#000000").font("Helvetica").fontSize(11);
+    doc.fillColor(TEXT_COLOR).font("Helvetica").fontSize(11);
   }
 }
 
@@ -114,23 +212,24 @@ async function renderBody(doc: PDFKit.PDFDocument, content: string) {
   let i = 0;
 
   while (i < lines.length) {
-    const line = lines[i].trimEnd();
+    const rawLine = lines[i].trimEnd();
+    const line = rawLine.trim();
 
-    if (line.trim() === "") {
+    if (line === "") {
       doc.moveDown(0.5);
       i++;
       continue;
     }
 
     if (
-      line.trim().startsWith("|") &&
+      line.startsWith("|") &&
       i + 1 < lines.length &&
       isTableSeparator(lines[i + 1].trim())
     ) {
       const tableLines = [line];
       let j = i + 2;
       while (j < lines.length && lines[j].trim().startsWith("|")) {
-        tableLines.push(lines[j]);
+        tableLines.push(lines[j].trim());
         j++;
       }
       renderTable(doc, tableLines.map(parseTableRow));
@@ -142,7 +241,7 @@ async function renderBody(doc: PDFKit.PDFDocument, content: string) {
     // brackets (with its own bullet points) instead of putting it all on
     // one line — collect lines until the closing ']' shows up, rather than
     // requiring a single-line match.
-    const diagramStart = line.trim().match(/^\[DIAGRAM:\s*(.*)$/i);
+    const diagramStart = line.match(/^\[DIAGRAM:\s*(.*)$/i);
     if (diagramStart) {
       const descLines = [diagramStart[1]];
       let j = i;
@@ -167,20 +266,71 @@ async function renderBody(doc: PDFKit.PDFDocument, content: string) {
       // as ordinary text instead of guessing.
     }
 
-    const h2 = line.match(/^##\s+(.*)/);
-    const h1 = line.match(/^#\s+(.*)/);
+    if (isHorizontalRule(line)) {
+      doc.moveDown(0.3);
+      const y = doc.y;
+      doc
+        .strokeColor("#dddddd")
+        .lineWidth(1)
+        .moveTo(doc.page.margins.left, y)
+        .lineTo(doc.page.width - doc.page.margins.right, y)
+        .stroke();
+      doc.moveDown(0.5);
+      i++;
+      continue;
+    }
+
+    // Any heading depth (#, ##, ### ...), not just '#'/'##' — a stray
+    // '### Subsection' used to fall through to plain text and show its
+    // literal hashes instead of being styled.
+    const heading = line.match(/^(#{1,6})\s+(.*)/);
+    const checkbox = line.match(/^[-*]\s+\[([ xX])\]\s+(.*)/);
+    const numbered = line.match(/^(\d+)\.\s+(.*)/);
     const bullet = line.match(/^[-*]\s+(.*)/);
 
-    if (h1) {
-      doc.moveDown(0.5).font("Helvetica-Bold").fontSize(16).text(stripInlineMarkdown(h1[1]));
-      doc.font("Helvetica").fontSize(11);
-    } else if (h2) {
-      doc.moveDown(0.4).font("Helvetica-Bold").fontSize(13).text(stripInlineMarkdown(h2[1]));
-      doc.font("Helvetica").fontSize(11);
+    if (heading) {
+      const level = heading[1].length;
+      const sizeByLevel: Record<number, number> = { 1: 18, 2: 14, 3: 12.5, 4: 11.5, 5: 11, 6: 11 };
+      const colorByLevel: Record<number, string> = {
+        1: ACCENT_DARK,
+        2: ACCENT,
+        3: "#333333",
+        4: "#444444",
+        5: "#444444",
+        6: "#444444",
+      };
+      doc.moveDown(level <= 2 ? 0.5 : 0.35);
+      renderInlineText(doc, heading[2], {
+        size: sizeByLevel[level] ?? 11,
+        color: colorByLevel[level] ?? TEXT_COLOR,
+        baseBold: true,
+      });
+    } else if (checkbox) {
+      // PDFKit's standard fonts only cover WinAnsi/Latin-1, which has no
+      // real checkbox glyph — a Unicode box-drawing character here renders
+      // as garbage instead of a checkbox, so stick to plain brackets.
+      const checked = checkbox[1].toLowerCase() === "x";
+      doc.font("Helvetica-Bold").fontSize(11).fillColor(ACCENT);
+      doc.text(checked ? "[x]  " : "[ ]  ", { continued: true, indent: 14 });
+      renderInlineText(doc, checkbox[2], { size: 11, color: TEXT_COLOR });
+    } else if (numbered) {
+      const leadingSpaces = rawLine.length - rawLine.trimStart().length;
+      const nestLevel = Math.min(3, Math.floor(leadingSpaces / 2));
+      doc.font("Helvetica-Bold").fontSize(11).fillColor(ACCENT);
+      doc.text(`${numbered[1]}.  `, { continued: true, indent: 14 + nestLevel * 16 });
+      renderInlineText(doc, numbered[2], { size: 11, color: TEXT_COLOR });
     } else if (bullet) {
-      doc.text(`•  ${stripInlineMarkdown(bullet[1])}`, { indent: 14 });
+      const leadingSpaces = rawLine.length - rawLine.trimStart().length;
+      const nestLevel = Math.min(3, Math.floor(leadingSpaces / 2));
+      // Same WinAnsi/Latin-1 constraint as checkboxes above — "•" (bullet)
+      // and "·" (middle dot) are both in that charset and render
+      // correctly; "◦"/"▪" aren't and come out as garbled glyphs.
+      const bulletChar = nestLevel === 0 ? "•" : nestLevel === 1 ? "-" : "·";
+      doc.font("Helvetica").fontSize(11).fillColor(ACCENT);
+      doc.text(`${bulletChar}  `, { continued: true, indent: 14 + nestLevel * 16 });
+      renderInlineText(doc, bullet[1], { size: 11, color: TEXT_COLOR });
     } else {
-      doc.text(stripInlineMarkdown(line));
+      renderInlineText(doc, line, { size: 11, color: TEXT_COLOR });
     }
     i++;
   }
@@ -194,9 +344,9 @@ export async function createPdfDocument(
   const chunks: Buffer[] = [];
   doc.on("data", (chunk) => chunks.push(chunk));
 
-  doc.font("Helvetica-Bold").fontSize(20).text(title);
+  doc.font("Helvetica-Bold").fontSize(20).fillColor(ACCENT_DARK).text(title);
   doc.moveDown();
-  doc.font("Helvetica").fontSize(11);
+  doc.fillColor(TEXT_COLOR).font("Helvetica").fontSize(11);
   await renderBody(doc, content);
   doc.end();
 
