@@ -55,14 +55,18 @@ async function extractPptxText(buffer: Buffer): Promise<string> {
     .join("\n\n");
 }
 
-export async function extractText(
-  file: File
+// The actual per-format extraction logic, keyed off a filename (for its
+// extension) and raw bytes — not tied to the browser/web File type, so
+// web_fetch can run the exact same logic on a downloaded URL's bytes
+// instead of duplicating (and inevitably drifting from) this per format.
+export async function extractTextFromBuffer(
+  buffer: Buffer,
+  name: string
 ): Promise<{ text: string; error?: string }> {
-  const name = file.name.toLowerCase();
-  const buffer = Buffer.from(await file.arrayBuffer());
+  const lower = name.toLowerCase();
 
   try {
-    if (name.endsWith(".pdf")) {
+    if (lower.endsWith(".pdf")) {
       const { PDFParse } = await import("pdf-parse");
       const parser = new PDFParse({ data: buffer });
       const result = await parser.getText();
@@ -82,24 +86,24 @@ export async function extractText(
         return {
           text: "",
           error:
-            `"${file.name}" looks like a scanned PDF with no selectable text, and we couldn't render ` +
+            `"${name}" looks like a scanned PDF with no selectable text, and we couldn't render ` +
             "it for OCR. Try exporting/saving each page as a JPG or PNG image and uploading that instead.",
         };
       }
     }
 
-    if (name.endsWith(".docx")) {
+    if (lower.endsWith(".docx")) {
       const mammoth = await import("mammoth");
       const { value } = await mammoth.extractRawText({ buffer });
       return { text: value.slice(0, MAX_CHARS) };
     }
 
-    if (name.endsWith(".pptx")) {
+    if (lower.endsWith(".pptx")) {
       const text = await extractPptxText(buffer);
       return { text: text.slice(0, MAX_CHARS) };
     }
 
-    if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+    if (lower.endsWith(".xlsx") || lower.endsWith(".xls")) {
       const XLSX = await import("xlsx");
       const workbook = XLSX.read(buffer, { type: "buffer" });
       const sheets = workbook.SheetNames.map((sheetName) => {
@@ -111,33 +115,40 @@ export async function extractText(
     }
 
     if (
-      name.endsWith(".jpg") ||
-      name.endsWith(".jpeg") ||
-      name.endsWith(".png") ||
-      name.endsWith(".webp") ||
-      name.endsWith(".heic") ||
-      name.endsWith(".heif")
+      lower.endsWith(".jpg") ||
+      lower.endsWith(".jpeg") ||
+      lower.endsWith(".png") ||
+      lower.endsWith(".webp") ||
+      lower.endsWith(".heic") ||
+      lower.endsWith(".heif")
     ) {
       const imageBuffer =
-        name.endsWith(".heic") || name.endsWith(".heif") ? await heicToJpeg(buffer) : buffer;
+        lower.endsWith(".heic") || lower.endsWith(".heif") ? await heicToJpeg(buffer) : buffer;
       const text = await ocrImageBuffer(imageBuffer);
       return { text: text.slice(0, MAX_CHARS) };
     }
 
     if (
-      name.endsWith(".txt") ||
-      name.endsWith(".md") ||
-      name.endsWith(".csv") ||
-      name.endsWith(".json")
+      lower.endsWith(".txt") ||
+      lower.endsWith(".md") ||
+      lower.endsWith(".csv") ||
+      lower.endsWith(".json")
     ) {
       return { text: buffer.toString("utf-8").slice(0, MAX_CHARS) };
     }
 
-    return { text: "", error: `Unsupported file type: ${file.name}` };
+    return { text: "", error: `Unsupported file type: ${name}` };
   } catch (err) {
     return {
       text: "",
-      error: `Couldn't read ${file.name}: ${err instanceof Error ? err.message : String(err)}`,
+      error: `Couldn't read ${name}: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
+}
+
+export async function extractText(
+  file: File
+): Promise<{ text: string; error?: string }> {
+  const buffer = Buffer.from(await file.arrayBuffer());
+  return extractTextFromBuffer(buffer, file.name);
 }

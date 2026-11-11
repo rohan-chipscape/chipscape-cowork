@@ -5,6 +5,12 @@ import { cosineSimilarity, embedTexts } from "./embeddings";
 
 const DIR = path.join(process.cwd(), ".data", "doc-index");
 
+// A document longer than this doesn't get pasted into a prompt directly —
+// it gets chunked+embedded instead, and read via the search_document tool.
+// Shared by both the upload route and web_fetch so a document behaves the
+// same way whether it arrived as an upload or a fetched URL.
+export const INLINE_CHAR_LIMIT = 12000;
+
 type DocumentChunk = { text: string; embedding: number[] };
 type DocumentIndexFile = { fileName: string; chunks: DocumentChunk[] };
 
