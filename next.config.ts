@@ -67,6 +67,15 @@ const nextConfig: NextConfig = {
   },
   cacheComponents: true,
   partialPrefetching: true,
+  experimental: {
+    // proxy.ts (our auth check) buffers the request body to let both it and
+    // the route handler read it; Next.js defaults that buffer to 10MB and
+    // silently truncates anything bigger instead of erroring, which
+    // corrupted the multipart body mid-boundary and surfaced as a confusing
+    // "Failed to parse body as FormData" crash in the upload route itself.
+    // Match the app's own 512MB upload limit.
+    proxyClientMaxBodySize: "512mb",
+  },
   turbopack: {
     rules: {
       "*.css": {
