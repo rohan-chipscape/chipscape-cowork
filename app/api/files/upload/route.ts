@@ -1,9 +1,10 @@
 import { extractText, heicToJpeg } from "@/lib/files/extract";
 
-// 10MB was rejecting entirely normal reports/decks/scanned contracts outright
-// before they even got a chance to be read. 50MB comfortably covers that
-// without risking the server on something absurd (a multi-GB video file).
-const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50 MB
+// Matches ChatGPT's own published per-file limit. The server has plenty of
+// headroom for this (14GB RAM, <1% used) — the real constraint on a huge
+// scanned file is processing time (OCR), not raw bytes, which the earlier
+// 180s nginx timeout bump already helps with.
+const MAX_FILE_BYTES = 512 * 1024 * 1024; // 512 MB
 const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"];
 
 function imageMimeType(name: string): string | null {
@@ -26,7 +27,7 @@ export async function POST(req: Request) {
   }
 
   if (file.size > MAX_FILE_BYTES) {
-    return Response.json({ error: "File is too large (max 50MB)" }, { status: 400 });
+    return Response.json({ error: "File is too large (max 512MB)" }, { status: 400 });
   }
 
   const { text, error } = await extractText(file);
