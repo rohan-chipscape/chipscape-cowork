@@ -76,8 +76,20 @@ export async function runAgentStep(
 // signal for Agent mode — don't leave these to the LLM classifier's
 // judgment call, since it occasionally misfires on identically-intentioned
 // phrasing. This is checked before the LLM call, not instead of it.
+//
+// Two real bugs fixed here:
+// 1. The typo-tolerant atom was `rese?a?search`, which actually only matches
+//    "ressearch" (double s) — it never matched "research" OR "reasearch",
+//    so this whole "do research" branch silently never fired in production.
+//    The correct atom is `rea?search` ("re" + optional "a" + "search").
+// 2. "do (a/some) research" alone missed real phrasing like "do deep
+//    research" or "do a thorough/proper/independent research" — an
+//    adjective between "do" and "research" isn't rare, and a request
+//    combining that with an uploaded document silently fell back to Debate
+//    mode, which has no web access at all, instead of Agent mode's
+//    search/fetch tools. Now tolerates up to 3 filler words.
 const EXPLICIT_RESEARCH_PATTERN =
-  /\b(do(ing)?\s+(a\s+|some\s+)?rese?a?search|rese?a?search\s+(this|that|it)|search\s+(the\s+)?(web|online|internet)|search\s+for|look\s+(it\s+)?up|look\s+up|find\s+out|browse\s+the\s+web|google\s+(it|this|that))\b/i;
+  /\b(do(ing)?\s+(?:[a-z]+\s+){0,3}rea?search|rea?search\s+(this|that|it)|search\s+(the\s+)?(web|online|internet)|search\s+for|look\s+(it\s+)?up|look\s+up|find\s+out|browse\s+the\s+web|google\s+(it|this|that))\b/i;
 
 export async function classifyIntent(
   question: string
