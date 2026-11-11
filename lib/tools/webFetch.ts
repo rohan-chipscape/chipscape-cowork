@@ -9,7 +9,10 @@ const BROWSER_HEADERS = {
 };
 
 async function fetchOnce(url: string) {
-  return fetch(url, { signal: AbortSignal.timeout(10000), headers: BROWSER_HEADERS });
+  // A 10s cap was too tight for a larger PDF/report over a slow connection —
+  // a 10-second abort surfaced to the user as a generic "operation was
+  // aborted due to timeout" with no indication it was just a slow download.
+  return fetch(url, { signal: AbortSignal.timeout(20000), headers: BROWSER_HEADERS });
 }
 
 export async function webFetch(url: string) {
@@ -32,6 +35,32 @@ export async function webFetch(url: string) {
     }
 
     const contentType = res.headers.get("content-type") ?? "";
+
+    // A linked PDF (report, filing, whitepaper) is extremely common to be
+    // asked to read — handle it the same way an uploaded PDF is handled,
+    // instead of just erroring out because it isn't HTML.
+    if (contentType.includes("application/pdf") || parsed.pathname.toLowerCase().endsWith(".pdf")) {
+      const buffer = Buffer.from(await res.arrayBuffer());
+      try {
+        const { PDFParse } = await import("pdf-parse");
+        const parser = new PDFParse({ data: buffer });
+        const result = await parser.getText();
+        await parser.destroy();
+        const text = result.text.trim();
+        if (text.length < 30) {
+          return {
+            error:
+              "This PDF has no selectable text (it looks like a scanned/image-only PDF), so its content can't be read from a URL fetch.",
+          };
+        }
+        return { url: parsed.toString(), text: text.slice(0, 8000) };
+      } catch (err) {
+        return {
+          error: `Couldn't read this PDF: ${err instanceof Error ? err.message : String(err)}`,
+        };
+      }
+    }
+
     if (!contentType.includes("text") && !contentType.includes("html")) {
       return { error: `Unsupported content type: ${contentType}` };
     }

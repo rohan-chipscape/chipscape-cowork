@@ -1,5 +1,22 @@
 import type { NextConfig } from "next";
 
+// pdf-parse (used both for uploaded PDFs and now for PDF links the agent
+// fetches) depends on pdfjs-dist + @napi-rs/canvas at runtime in ways Next's
+// static file tracer can't follow on its own — see the comments below.
+const PDF_PARSE_TRACING_INCLUDES = [
+  // pdfjs-dist loads its worker script by computing a path at runtime — the
+  // tracer only found 1 of its 387 files, missing pdf.worker.mjs entirely,
+  // so every PDF read failed with "Cannot find module ... pdf.worker.mjs".
+  "./node_modules/pdfjs-dist/**/*",
+  // pdf-parse's own getText() needs @napi-rs/canvas just to provide a
+  // DOMMatrix polyfill for pdfjs-dist, even for plain text extraction with
+  // no rendering — without it, every PDF read throws "DOMMatrix is not
+  // defined". Its platform-specific native binary package (one of these per
+  // OS/arch, resolved by npm at install time) needs the same treatment.
+  "./node_modules/@napi-rs/canvas/**/*",
+  "./node_modules/@napi-rs/canvas-*/**/*",
+];
+
 const nextConfig: NextConfig = {
   /* config options here */
   output: "standalone",
@@ -13,11 +30,7 @@ const nextConfig: NextConfig = {
   // upload in production with "Cannot find module". Force everything in.
   outputFileTracingIncludes: {
     "/api/files/upload/**": [
-      // pdfjs-dist (used by pdf-parse for plain PDF text extraction) loads
-      // its worker script by computing a path at runtime — the tracer only
-      // found 1 of its 387 files, missing pdf.worker.mjs entirely, so every
-      // PDF upload failed with "Cannot find module ... pdf.worker.mjs".
-      "./node_modules/pdfjs-dist/**/*",
+      ...PDF_PARSE_TRACING_INCLUDES,
       "./node_modules/tesseract.js/**/*",
       "./node_modules/bmp-js/**/*",
       "./node_modules/idb-keyval/**/*",
@@ -28,15 +41,12 @@ const nextConfig: NextConfig = {
       "./node_modules/tesseract.js-core/**/*",
       "./node_modules/wasm-feature-detect/**/*",
       "./node_modules/zlibjs/**/*",
-      // pdf-parse's own getText() needs @napi-rs/canvas just to provide a
-      // DOMMatrix polyfill for pdfjs-dist, even for plain text extraction
-      // with no rendering — without it, every PDF upload throws
-      // "DOMMatrix is not defined". Its platform-specific native binary
-      // package (one of these per OS/arch, resolved by npm at install
-      // time) needs the same force-include treatment as the JS-only deps.
-      "./node_modules/@napi-rs/canvas/**/*",
-      "./node_modules/@napi-rs/canvas-*/**/*",
     ],
+    // web_fetch now parses a linked PDF with the same pdf-parse path as an
+    // uploaded one — this route needs the same force-included files, or it
+    // hits the exact same "Cannot find module"/"DOMMatrix is not defined"
+    // crashes the upload route did before it got this treatment.
+    "/api/agent/execute/**": PDF_PARSE_TRACING_INCLUDES,
   },
   cacheComponents: true,
   partialPrefetching: true,
