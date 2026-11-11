@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import type { ConversationSummary } from "@/lib/conversations/types";
 import { SidebarIcon, NewChatIcon, TrashIcon } from "./icons";
 
@@ -14,6 +15,7 @@ export function Sidebar({
   onDelete,
   userName,
   onLogout,
+  isAdmin,
 }: {
   collapsed: boolean;
   onToggleCollapsed: () => void;
@@ -24,6 +26,7 @@ export function Sidebar({
   onDelete: (id: string) => void;
   userName: string;
   onLogout: () => void;
+  isAdmin?: boolean;
 }) {
   const displayName = userName.trim() || "Guest";
   const initial = displayName[0]?.toUpperCase() ?? "G";
@@ -134,6 +137,15 @@ export function Sidebar({
         </button>
         {menuOpen && (
           <div className="absolute bottom-full left-2 right-2 mb-1 overflow-hidden rounded-lg bg-[#2f2f2f] shadow-xl">
+            {isAdmin && (
+              <Link
+                href="/admin"
+                onClick={() => setMenuOpen(false)}
+                className="block w-full px-3 py-2.5 text-left text-sm text-neutral-200 hover:bg-white/10"
+              >
+                Admin — team chat history
+              </Link>
+            )}
             <button
               onClick={() => {
                 setMenuOpen(false);

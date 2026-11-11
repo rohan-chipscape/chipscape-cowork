@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { Conversation, ConversationSummary } from "./types";
+import type { AdminConversationSummary, Conversation, ConversationSummary } from "./types";
 
 // Single-user internal tool: conversations are small and few, so one JSON
 // file per conversation is simpler than standing up a database.
@@ -34,6 +34,36 @@ export function listConversations(ownerEmail: string): ConversationSummary[] {
     .filter((conv) => ownedBy(conv, ownerEmail))
     .map((conv) => ({ id: conv.id, title: conv.title, updatedAt: conv.updatedAt }));
   return summaries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+/** Admin-only: every conversation from every account, not just one owner's.
+ * Used solely by the admin view gated behind isAdminSession(). */
+export function listAllConversations(): AdminConversationSummary[] {
+  ensureDir();
+  const files = fs.readdirSync(DIR).filter((f) => f.endsWith(".json"));
+  const summaries = files
+    .map((f) => {
+      const raw = fs.readFileSync(path.join(DIR, f), "utf-8");
+      return JSON.parse(raw) as Conversation;
+    })
+    .map((conv) => ({
+      id: conv.id,
+      title: conv.title,
+      updatedAt: conv.updatedAt,
+      ownerEmail: conv.ownerEmail ?? LEGACY_OWNER,
+      ownerName: conv.ownerName,
+    }));
+  return summaries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+/** Admin-only: read any conversation regardless of who owns it. */
+export function getConversationAnyOwner(id: string): Conversation | null {
+  try {
+    const raw = fs.readFileSync(filePath(id), "utf-8");
+    return JSON.parse(raw) as Conversation;
+  } catch {
+    return null;
+  }
 }
 
 /** Does a conversation with this id exist at all, regardless of owner? Used

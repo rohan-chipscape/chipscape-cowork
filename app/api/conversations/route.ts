@@ -1,7 +1,7 @@
 import { connection } from "next/server";
 import { listConversations, saveConversation } from "@/lib/conversations/store";
 import type { Conversation } from "@/lib/conversations/types";
-import { getSessionEmail } from "@/lib/auth/session";
+import { getSessionEmail, getSessionName } from "@/lib/auth/session";
 
 export async function GET() {
   await connection();
@@ -25,6 +25,7 @@ export async function POST(req: Request) {
     order: [],
     turns: [],
     ownerEmail,
+    ownerName: (await getSessionName()) ?? undefined,
   };
   saveConversation(conv);
   return Response.json(conv);

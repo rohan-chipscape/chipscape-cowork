@@ -1,6 +1,6 @@
 import { connection } from "next/server";
 import { getAccountTokens } from "@/lib/google/accountStore";
-import { getSessionEmail } from "@/lib/auth/session";
+import { getSessionEmail, isAdminSession } from "@/lib/auth/session";
 
 export async function GET() {
   await connection(); // reads a local file at request time; never prerender this
@@ -11,5 +11,6 @@ export async function GET() {
   );
   const email = await getSessionEmail();
   const connected = configured && !!email && !!getAccountTokens(email)?.refresh_token;
-  return Response.json({ configured, connected, email: connected ? email : null });
+  const isAdmin = await isAdminSession();
+  return Response.json({ configured, connected, email: connected ? email : null, isAdmin });
 }

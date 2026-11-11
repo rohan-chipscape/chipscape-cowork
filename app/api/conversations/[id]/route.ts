@@ -6,7 +6,7 @@ import {
   saveConversation,
 } from "@/lib/conversations/store";
 import type { Conversation } from "@/lib/conversations/types";
-import { getSessionEmail } from "@/lib/auth/session";
+import { getSessionEmail, getSessionName } from "@/lib/auth/session";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -43,6 +43,7 @@ export async function PUT(req: Request, { params }: Params) {
     order: body.order ?? existing?.order ?? [],
     turns: body.turns ?? existing?.turns ?? [],
     ownerEmail,
+    ownerName: (await getSessionName()) ?? existing?.ownerName,
   };
   saveConversation(conv);
   return Response.json(conv);

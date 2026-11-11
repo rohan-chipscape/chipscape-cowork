@@ -40,6 +40,7 @@ export default function Home() {
   const [googleStatus, setGoogleStatus] = useState<{
     configured: boolean;
     connected: boolean;
+    isAdmin?: boolean;
   } | null>(null);
   const [userName, setUserName] = useState("");
   // Shared conversation memory across BOTH debate and agent turns — without
@@ -342,6 +343,7 @@ export default function Home() {
         onDelete={deleteChat}
         userName={userName}
         onLogout={handleLogout}
+        isAdmin={googleStatus?.isAdmin}
       />
 
       <div className="flex flex-1 flex-col">
