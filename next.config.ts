@@ -20,7 +20,16 @@ const PDF_PARSE_TRACING_INCLUDES = [
 const nextConfig: NextConfig = {
   /* config options here */
   output: "standalone",
-  serverExternalPackages: ["ffmpeg-static", "pdfkit", "tesseract.js", "pdfjs-dist", "@napi-rs/canvas"],
+  serverExternalPackages: [
+    "ffmpeg-static",
+    "pdfkit",
+    "tesseract.js",
+    "pdfjs-dist",
+    "@napi-rs/canvas",
+    "heic-convert",
+    "heic-decode",
+    "libheif-js",
+  ],
   // tesseract.js's Node worker thread requires its own sibling files
   // (getCore.js, gunzip.js, cache.js, the package root via a relative
   // "require('..')") AND its own top-level dependencies (bmp-js,
@@ -41,6 +50,14 @@ const nextConfig: NextConfig = {
       "./node_modules/tesseract.js-core/**/*",
       "./node_modules/wasm-feature-detect/**/*",
       "./node_modules/zlibjs/**/*",
+      // heic-convert decodes an iPhone .heic/.heif photo to JPEG via
+      // libheif-js, which loads a ~2MB libheif.wasm file by computing a
+      // path at runtime — same untraceable pattern as pdfjs-dist's worker
+      // and tesseract.js's worker above, so it needs the same force-include.
+      "./node_modules/heic-convert/**/*",
+      "./node_modules/heic-decode/**/*",
+      "./node_modules/libheif-js/**/*",
+      "./node_modules/jpeg-js/**/*",
     ],
     // web_fetch now parses a linked PDF with the same pdf-parse path as an
     // uploaded one — this route needs the same force-included files, or it

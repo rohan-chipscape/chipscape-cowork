@@ -51,7 +51,7 @@ export async function webSearch(query: string) {
       title: r.title,
       url: r.url,
       snippet: cleanSnippet(r.content ?? ""),
-      content: r.raw_content ? cleanSnippet(r.raw_content).slice(0, 3000) : undefined,
+      content: r.raw_content ? cleanSnippet(r.raw_content).slice(0, 6000) : undefined,
     }));
     return {
       answer: data.answer ? cleanSnippet(data.answer) : undefined,

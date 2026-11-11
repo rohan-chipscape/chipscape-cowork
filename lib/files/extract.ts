@@ -1,9 +1,22 @@
 import { ocrImageBuffer, ocrScannedPdf } from "./ocr";
 
-const MAX_CHARS = 20000;
+// A hard per-file cap still exists (modern models have a context window,
+// not an infinite one), but 20,000 chars (~5,000 words) was cutting off any
+// real report/contract partway through. 150,000 chars (~35-40k tokens) comfortably
+// fits a long document alongside the rest of the conversation.
+const MAX_CHARS = 150000;
 // If a "normal" PDF text extraction comes back shorter than this, it's
 // almost certainly a scanned/image-only PDF rather than a real text layer.
 const MIN_TEXT_LAYER_CHARS = 30;
+
+// An iPhone photo is .heic by default — decode it to JPEG first so both OCR
+// and the vision data URL (see app/api/files/upload/route.ts) can use it,
+// the same as any other image.
+export async function heicToJpeg(buffer: Buffer): Promise<Buffer> {
+  const convert = (await import("heic-convert")).default;
+  const out = await convert({ buffer, format: "JPEG", quality: 0.9 });
+  return Buffer.from(out);
+}
 
 function decodeXmlEntities(s: string): string {
   return s
@@ -100,9 +113,13 @@ export async function extractText(
       name.endsWith(".jpg") ||
       name.endsWith(".jpeg") ||
       name.endsWith(".png") ||
-      name.endsWith(".webp")
+      name.endsWith(".webp") ||
+      name.endsWith(".heic") ||
+      name.endsWith(".heif")
     ) {
-      const text = await ocrImageBuffer(buffer);
+      const imageBuffer =
+        name.endsWith(".heic") || name.endsWith(".heif") ? await heicToJpeg(buffer) : buffer;
+      const text = await ocrImageBuffer(imageBuffer);
       return { text: text.slice(0, MAX_CHARS) };
     }
 

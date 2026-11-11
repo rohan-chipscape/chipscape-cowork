@@ -53,7 +53,7 @@ export async function webFetch(url: string) {
               "This PDF has no selectable text (it looks like a scanned/image-only PDF), so its content can't be read from a URL fetch.",
           };
         }
-        return { url: parsed.toString(), text: text.slice(0, 8000) };
+        return { url: parsed.toString(), text: text.slice(0, 20000) };
       } catch (err) {
         return {
           error: `Couldn't read this PDF: ${err instanceof Error ? err.message : String(err)}`,
@@ -73,7 +73,7 @@ export async function webFetch(url: string) {
       .replace(/&nbsp;/g, " ")
       .replace(/\s+/g, " ")
       .trim()
-      .slice(0, 8000);
+      .slice(0, 20000);
 
     return { url: parsed.toString(), text };
   } catch (err) {

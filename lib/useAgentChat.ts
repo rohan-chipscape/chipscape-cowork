@@ -23,7 +23,11 @@ export type AgentTurn = {
   done: boolean;
 };
 
-const MAX_STEPS = 8;
+// A genuinely thorough research task (verifying several regulatory claims
+// across official sources, say) can easily need more than 8 search/fetch
+// rounds — 8 was cutting off real, in-progress work with "ask a more
+// specific follow-up" instead of letting it finish.
+const MAX_STEPS = 25;
 
 export function useAgentChat() {
   const [turns, setTurns] = useState<AgentTurn[]>([]);
