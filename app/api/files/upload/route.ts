@@ -1,4 +1,5 @@
 import { extractText, heicToJpeg } from "@/lib/files/extract";
+import { buildDocumentIndex } from "@/lib/files/documentIndex";
 
 // Matches ChatGPT's own published per-file limit. The server has plenty of
 // headroom for this (14GB RAM, <1% used) — the real constraint on a huge
@@ -6,6 +7,15 @@ import { extractText, heicToJpeg } from "@/lib/files/extract";
 // 180s nginx timeout bump already helps with.
 const MAX_FILE_BYTES = 512 * 1024 * 1024; // 512 MB
 const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"];
+
+// A document longer than this doesn't get pasted into the prompt directly —
+// instead of silently truncating (the old behavior) or blowing up the
+// context on every single message regardless of what was asked, it gets
+// chunked + embedded once here, and the agent calls search_document to pull
+// in only the parts actually relevant to each question — the same
+// chunk-and-retrieve approach ChatGPT itself uses for large files, instead
+// of re-reading the whole document on every turn.
+const INLINE_CHAR_LIMIT = 12000;
 
 function imageMimeType(name: string): string | null {
   const lower = name.toLowerCase();
@@ -49,6 +59,21 @@ export async function POST(req: Request) {
       }
       imageDataUrl = `data:${mime};base64,${buffer.toString("base64")}`;
     }
+  }
+
+  // Images are always handled via imageDataUrl (vision) — never worth
+  // chunking their OCR'd text, which is usually short anyway.
+  const isImage = IMAGE_EXTENSIONS.some((ext) => lowerName.endsWith(ext));
+  if (!isImage && text.length > INLINE_CHAR_LIMIT) {
+    const fileId = crypto.randomUUID();
+    await buildDocumentIndex(fileId, file.name, text);
+    return Response.json({
+      name: file.name,
+      text: text.slice(0, 2000),
+      fileId,
+      needsRetrieval: true,
+      fullLength: text.length,
+    });
   }
 
   return Response.json({ name: file.name, text, imageDataUrl });

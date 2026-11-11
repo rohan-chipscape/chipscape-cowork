@@ -9,6 +9,11 @@ export type Attachment = {
   text: string;
   previewUrl?: string;
   imageDataUrl?: string;
+  // Set for a document too long to paste into one prompt — the agent looks
+  // it up with the search_document tool instead of reading it all at once.
+  fileId?: string;
+  needsRetrieval?: boolean;
+  fullLength?: number;
 };
 
 export function Composer({

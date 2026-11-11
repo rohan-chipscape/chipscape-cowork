@@ -16,6 +16,7 @@ import { buildMemoryBlock } from "@/lib/memory/context";
 import { createPdfDocument } from "@/lib/files/generateDocument";
 import { generateImage } from "@/lib/files/generateImage";
 import { getStockQuote } from "@/lib/tools/stockQuote";
+import { searchDocumentIndex } from "@/lib/files/documentIndex";
 
 const BASE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
   {
@@ -118,6 +119,29 @@ const BASE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
           title: { type: "string", description: "Short title, used as the filename (optional)." },
         },
         required: ["prompt"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_document",
+      description:
+        "Search a large attached document for the parts relevant to a specific question — use this for " +
+        "any attached file whose message says it's too long to read in full (it gives you a fileId and a " +
+        "short preview instead of the full text). Call this with a focused query for whatever specific " +
+        "information you need from it; it returns the most relevant passages, not the whole document. " +
+        "Call it more than once with different queries if the question touches several topics or sections.",
+      parameters: {
+        type: "object",
+        properties: {
+          fileId: { type: "string", description: "The fileId given alongside the document's preview." },
+          query: {
+            type: "string",
+            description: "What to look for in the document — be specific, like a search query.",
+          },
+        },
+        required: ["fileId", "query"],
       },
     },
   },
@@ -299,6 +323,8 @@ export async function executeTool(
       return webFetch(String(args.url ?? ""));
     case "run_js":
       return runJs(String(args.code ?? ""));
+    case "search_document":
+      return searchDocumentIndex(String(args.fileId ?? ""), String(args.query ?? ""));
     case "create_document": {
       const title = String(args.title ?? "Document");
       const { id, filename } = await createPdfDocument(title, String(args.content ?? ""));

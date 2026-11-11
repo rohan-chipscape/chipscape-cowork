@@ -231,6 +231,9 @@ export default function Home() {
           text: data.text,
           previewUrl,
           imageDataUrl: data.imageDataUrl,
+          fileId: data.fileId,
+          needsRetrieval: data.needsRetrieval,
+          fullLength: data.fullLength,
         });
       }
     } catch (err) {
@@ -266,23 +269,34 @@ export default function Home() {
       ? `📎 ${attachment.name}${q ? `\n\n${q}` : ""}`
       : q;
     const imageDataUrl = attachment?.imageDataUrl;
+    const needsRetrieval = attachment?.needsRetrieval;
     const modelQuestion = attachment
       ? imageDataUrl
         ? q || "Look at the attached image and describe what's in it, answering anything specific I asked."
-        : `Attached file: ${attachment.name}\n"""\n${attachment.text}\n"""\n\n${
-            q || "Summarize this file and call out anything notable."
-          }`
+        : needsRetrieval
+          ? `Attached file: ${attachment.name} (fileId: ${attachment.fileId}) — this document is ` +
+            `${attachment.fullLength?.toLocaleString()} characters long, too long to read in full here. ` +
+            `Use the search_document tool with this fileId and a focused query to find whatever's ` +
+            `actually relevant before answering — call it more than once if the question touches ` +
+            `several parts of the document. Preview of its start:\n"""\n${attachment.text}\n"""\n\n${
+              q || "Summarize this document and call out anything notable."
+            }`
+          : `Attached file: ${attachment.name}\n"""\n${attachment.text}\n"""\n\n${
+              q || "Summarize this file and call out anything notable."
+            }`
       : q;
     removeAttachment();
 
     // An attached image needs real vision (Agent mode's GPT-5.1 call) to
     // actually be looked at — the Debate panel's providers only ever see
     // plain text, so routing there would silently fall back to OCR'd text
-    // (or nothing, for a photo/chart with no text at all). Skip the
-    // classifier entirely in that case instead of leaving it to guess.
+    // (or nothing, for a photo/chart with no text at all). A document too
+    // long to inline needs the search_document tool instead, which only
+    // Agent mode can call. Skip the classifier entirely in either case
+    // instead of leaving it to guess.
     setClassifying(true);
     let mode: "agent" | "debate" = "debate";
-    if (imageDataUrl) {
+    if (imageDataUrl || needsRetrieval) {
       mode = "agent";
     } else {
       try {

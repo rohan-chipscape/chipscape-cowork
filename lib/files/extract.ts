@@ -1,10 +1,11 @@
 import { ocrImageBuffer, ocrScannedPdf } from "./ocr";
 
-// A hard per-file cap still exists (modern models have a context window,
-// not an infinite one), but 20,000 chars (~5,000 words) was cutting off any
-// real report/contract partway through. 150,000 chars (~35-40k tokens) comfortably
-// fits a long document alongside the rest of the conversation.
-const MAX_CHARS = 150000;
+// This is the ceiling for how much of a document we'll ever READ at all —
+// not how much gets pasted into one prompt (see INLINE_CHAR_LIMIT in the
+// upload route, which decides between inlining the text directly and
+// building a searchable chunk index for documents bigger than that). 1M
+// characters comfortably covers even a few-hundred-page document.
+const MAX_CHARS = 1000000;
 // If a "normal" PDF text extraction comes back shorter than this, it's
 // almost certainly a scanned/image-only PDF rather than a real text layer.
 const MIN_TEXT_LAYER_CHARS = 30;
