@@ -9,6 +9,7 @@ const TOOL_LABELS: Record<string, string> = {
   get_stock_quote: "Get a stock quote",
   web_search: "Search the web",
   web_fetch: "Fetch a web page",
+  search_document: "Search the document",
   run_js: "Run JavaScript",
   create_document: "Create a document",
   generate_image: "Generate an image",
@@ -333,6 +334,32 @@ export function AgentTurnView({
           );
         }
 
+        if (step.name === "search_document") {
+          const result = step.result ? safeParse(step.result) : null;
+          if (result?.error) {
+            return (
+              <div key={step.id} className="rounded-2xl bg-[#2f2f2f] px-4 py-3 text-sm text-red-300">
+                {result.error}
+              </div>
+            );
+          }
+          // Same as web_search — once it succeeds, the final answer already
+          // incorporates whatever it found, so there's nothing useful to
+          // show by itself (and the raw matched passages are not something
+          // a user wants dumped into the chat).
+          if (result?.results || step.status === "done" || step.status === "approved") {
+            return null;
+          }
+          return (
+            <BusyStatus
+              key={step.id}
+              label="Searching the document…"
+              errorLabel="Couldn't search the document."
+              status={step.status}
+            />
+          );
+        }
+
         if (step.name === "create_document") {
           const result = step.result ? safeParse(step.result) : null;
           if (result?.error) {
@@ -449,6 +476,9 @@ export function AgentTurnView({
               (s.name === "web_search" || s.name === "web_fetch" || s.name === "get_stock_quote") &&
               !safeParse(s.result ?? "")?.error
           ) && <p className="px-1 text-xs text-neutral-500">🔍 Searched the web</p>}
+          {turn.steps.some(
+            (s) => s.name === "search_document" && !safeParse(s.result ?? "")?.error
+          ) && <p className="px-1 text-xs text-neutral-500">📄 Searched the document</p>}
           <div className="px-1 text-neutral-100">
             <Markdown text={turn.finalText} />
           </div>
