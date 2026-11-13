@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { ConversationSummary } from "@/lib/conversations/types";
 import { SidebarIcon, NewChatIcon, TrashIcon } from "./icons";
+import { WhatsAppConnect } from "./WhatsAppConnect";
 
 export function Sidebar({
   collapsed,
@@ -146,6 +147,7 @@ export function Sidebar({
                 Admin — team chat history
               </Link>
             )}
+            <WhatsAppConnect />
             <button
               onClick={() => {
                 setMenuOpen(false);

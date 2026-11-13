@@ -21,4 +21,4 @@ export type AgentStepResult =
 // creating a calendar event) require explicit approval before running.
 // Read-only/generative tools (search, fetch, document/image generation) run
 // immediately, same as ChatGPT's own browsing/tool use.
-export const SIDE_EFFECT_TOOLS = new Set(["gmail_send", "calendar_create_event"]);
+export const SIDE_EFFECT_TOOLS = new Set(["gmail_send", "calendar_create_event", "whatsapp_send_message"]);

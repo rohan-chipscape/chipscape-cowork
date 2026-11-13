@@ -12,6 +12,7 @@ import {
   driveReadFile,
 } from "@/lib/tools/google";
 import { getAccountTokens } from "@/lib/google/accountStore";
+import { getSessionStatus, listChats, readMessages, sendMessage } from "@/lib/whatsapp/client";
 import { buildMemoryBlock } from "@/lib/memory/context";
 import { createPdfDocument } from "@/lib/files/generateDocument";
 import { generateImage } from "@/lib/files/generateImage";
@@ -257,6 +258,55 @@ const GOOGLE_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
   },
 ];
 
+// Automates a real, logged-in WhatsApp Web session (via whatsapp-web.js) —
+// not an official WhatsApp integration. Only available once the user has
+// connected WhatsApp from the account menu (scanned the QR code).
+const WHATSAPP_TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
+  {
+    type: "function",
+    function: {
+      name: "whatsapp_list_chats",
+      description:
+        "List the signed-in user's recent WhatsApp chats (name, unread count, last message preview). " +
+        "Use this to find a chat before reading or sending to it.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "whatsapp_read_messages",
+      description: "Read recent messages from a WhatsApp chat matching a name (e.g. a contact or group name).",
+      parameters: {
+        type: "object",
+        properties: {
+          chat: { type: "string", description: "Contact or group name to search for (partial match)." },
+        },
+        required: ["chat"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "whatsapp_send_message",
+      description:
+        "Send a WhatsApp message to a chat matching a name. This sends immediately once approved — always " +
+        "show the CEO the exact message text and who it's going to before this is called, same as drafting an email.",
+      parameters: {
+        type: "object",
+        properties: {
+          chat: { type: "string", description: "Contact or group name to search for (partial match)." },
+          message: { type: "string" },
+        },
+        required: ["chat", "message"],
+      },
+    },
+  },
+];
+
+const WHATSAPP_TOOL_NAMES = new Set(["whatsapp_list_chats", "whatsapp_read_messages", "whatsapp_send_message"]);
+
 const GOOGLE_TOOL_NAMES = new Set([
   "gmail_search",
   "gmail_read",
@@ -274,7 +324,10 @@ function isSessionAccountConnected(sessionEmail: string | null): boolean {
 }
 
 export function getAgentTools(sessionEmail: string | null): OpenAI.Chat.ChatCompletionTool[] {
-  return isSessionAccountConnected(sessionEmail) ? [...BASE_TOOLS, ...GOOGLE_TOOLS] : BASE_TOOLS;
+  const tools = [...BASE_TOOLS];
+  if (isSessionAccountConnected(sessionEmail)) tools.push(...GOOGLE_TOOLS);
+  if (sessionEmail && getSessionStatus(sessionEmail).state === "ready") tools.push(...WHATSAPP_TOOLS);
+  return tools;
 }
 
 export async function executeTool(
@@ -311,6 +364,18 @@ export async function executeTool(
         return driveSearch(sessionEmail, String(args.query ?? ""));
       case "drive_read_file":
         return driveReadFile(sessionEmail, String(args.file_id ?? ""));
+    }
+  }
+
+  if (WHATSAPP_TOOL_NAMES.has(name)) {
+    if (!sessionEmail) return { error: "No WhatsApp account is connected for this session." };
+    switch (name) {
+      case "whatsapp_list_chats":
+        return { chats: await listChats(sessionEmail) };
+      case "whatsapp_read_messages":
+        return readMessages(sessionEmail, String(args.chat ?? ""));
+      case "whatsapp_send_message":
+        return sendMessage(sessionEmail, String(args.chat ?? ""), String(args.message ?? ""));
     }
   }
 
@@ -354,18 +419,24 @@ export function getAgentSystemPrompt(sessionEmail: string | null): string {
   const accountsNote = isSessionAccountConnected(sessionEmail)
     ? `Gmail/Calendar/Drive tools are available for the signed-in account (${sessionEmail}).`
     : "Gmail/Calendar/Drive tools aren't available — this account isn't connected to Google.";
+  const whatsappNote =
+    sessionEmail && getSessionStatus(sessionEmail).state === "ready"
+      ? "WhatsApp tools (list/read/send) are also available for this account's connected WhatsApp."
+      : "WhatsApp tools aren't available right now — if asked to check/send WhatsApp, tell the CEO to connect " +
+        "WhatsApp from the account menu first (one-time QR code scan), rather than saying it's impossible.";
 
   return (
     "You are an agentic assistant working directly for a CEO. You can call tools to get an exact stock quote, " +
     "search the web, fetch specific pages, run short JavaScript calculations, create a downloadable PDF " +
     "document, generate an image from a text description, and — " +
     `when connected — search/read/send Gmail, list/create Google Calendar events, and search/read Google ` +
-    `Drive files. ${accountsNote} ` +
-    "Sending an email or creating a calendar event is shown to the CEO for approval before it runs; every " +
-    "other tool (search, fetch, document/image generation, reading Gmail/Calendar/Drive) runs immediately " +
-    "and you'll see its result right away. Use tools only when they're actually needed to answer accurately " +
-    "or complete the task — for a question you can answer directly from your own knowledge, just answer " +
-    "directly without calling a tool. For ANY question about a stock or share price, always call " +
+    `Drive files. ${accountsNote} ${whatsappNote} ` +
+    "Sending an email, creating a calendar event, or sending a WhatsApp message is shown to the CEO for " +
+    "approval before it runs; every other tool (search, fetch, document/image generation, reading " +
+    "Gmail/Calendar/Drive/WhatsApp) runs immediately and you'll see its result right away. Use tools only " +
+    "when they're actually needed to answer accurately or complete the task — for a question you can answer " +
+    "directly from your own knowledge, just answer directly without calling a tool. For ANY question about " +
+    "a stock or share price, always call " +
     "get_stock_quote first — it's an exact, exchange-sourced number (the same kind of feed a brokerage app " +
     "uses), not an approximation from a scraped page. Only fall back to web_search for stock questions if " +
     "get_stock_quote errors out (e.g. the company isn't resolvable to a ticker). When a question needs some " +

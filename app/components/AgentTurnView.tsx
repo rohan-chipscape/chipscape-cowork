@@ -20,6 +20,9 @@ const TOOL_LABELS: Record<string, string> = {
   calendar_create_event: "Create a calendar event",
   drive_search: "Search Google Drive",
   drive_read_file: "Read a Drive file",
+  whatsapp_list_chats: "List WhatsApp chats",
+  whatsapp_read_messages: "Read WhatsApp messages",
+  whatsapp_send_message: "Send a WhatsApp message",
 };
 
 const GOOGLE_TOOLS = new Set([
@@ -61,6 +64,10 @@ function prettyArgs(name: string, raw: string): string {
         }`;
       case "drive_read_file":
         return `${prefix}file ${args.file_id}`;
+      case "whatsapp_read_messages":
+        return `chat: ${args.chat}`;
+      case "whatsapp_send_message":
+        return `To: ${args.chat}\n\n${args.message}`;
       default:
         return raw;
     }
@@ -115,6 +122,18 @@ function EmailPreview({
       <div className="mt-2 whitespace-pre-wrap border-t border-white/10 pt-2 text-neutral-300">
         {body}
       </div>
+    </div>
+  );
+}
+
+function WhatsAppMessagePreview({ chat, message }: { chat: string; message: string }) {
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#1f1f1f] p-3 text-sm">
+      <p className="text-neutral-200">
+        <span className="text-neutral-500">To: </span>
+        {chat}
+      </p>
+      <div className="mt-2 whitespace-pre-wrap border-t border-white/10 pt-2 text-neutral-300">{message}</div>
     </div>
   );
 }
@@ -334,6 +353,28 @@ export function AgentTurnView({
           );
         }
 
+        if (step.name === "whatsapp_list_chats" || step.name === "whatsapp_read_messages") {
+          const result = step.result ? safeParse(step.result) : null;
+          if (result?.error) {
+            return (
+              <div key={step.id} className="rounded-2xl bg-[#2f2f2f] px-4 py-3 text-sm text-red-300">
+                {result.error}
+              </div>
+            );
+          }
+          if (result || step.status === "done" || step.status === "approved") {
+            return null;
+          }
+          return (
+            <BusyStatus
+              key={step.id}
+              label="Checking WhatsApp…"
+              errorLabel="Couldn't reach WhatsApp."
+              status={step.status}
+            />
+          );
+        }
+
         if (step.name === "search_document") {
           const result = step.result ? safeParse(step.result) : null;
           if (result?.error) {
@@ -416,6 +457,8 @@ export function AgentTurnView({
               description={args.description}
               attendees={args.attendees}
             />
+          ) : step.name === "whatsapp_send_message" && args ? (
+            <WhatsAppMessagePreview chat={args.chat} message={args.message} />
           ) : (
             <pre className="whitespace-pre-wrap break-words font-mono text-xs text-neutral-400">
               {prettyArgs(step.name, step.args)}
