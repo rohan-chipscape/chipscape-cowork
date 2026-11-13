@@ -57,7 +57,20 @@ export async function startSession(email: string): Promise<void> {
     puppeteer: {
       headless: true,
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        // Debian's chromium package launches with crash reporting on by
+        // default, which needs a writable database path this container
+        // doesn't set up — without this it refuses to start at all with
+        // "chrome_crashpad_handler: --database is required". Also disable
+        // GPU (none in a container) and use /tmp for shared memory, since
+        // Docker's default /dev/shm (64MB) is too small for Chromium and
+        // otherwise crashes mid-render.
+        "--disable-crash-reporter",
+        "--disable-gpu",
+        "--disable-dev-shm-usage",
+      ],
     },
   });
   session.client = client;
