@@ -16,6 +16,30 @@ const qrcodeTerminal = require("qrcode-terminal");
 
 const CONFIG_PATH = path.join(__dirname, "config.json");
 
+// Use whatever Chrome/Edge/Chromium is already installed instead of having
+// puppeteer download its own — nearly every business computer already has
+// one of these, and it avoids a large, sometimes-flaky browser download.
+function findInstalledBrowser() {
+  const candidates = {
+    darwin: [
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+      "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    ],
+    win32: [
+      "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+      "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+      "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+    ],
+    linux: ["/usr/bin/google-chrome", "/usr/bin/chromium-browser", "/usr/bin/chromium"],
+  };
+  for (const p of candidates[process.platform] || []) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
 function ask(question) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   return new Promise((resolve) => rl.question(question, (answer) => {
@@ -52,6 +76,15 @@ async function postJson(serverUrl, pathname, body) {
 async function main() {
   const { email, password, serverUrl } = await loadOrCreateConfig();
 
+  const browserPath = findInstalledBrowser();
+  if (!browserPath) {
+    console.error(
+      "\nCouldn't find Chrome, Edge, or Chromium installed on this computer.\n" +
+        "Install Google Chrome from https://www.google.com/chrome/ and run this again.\n"
+    );
+    process.exit(1);
+  }
+
   const { Client, LocalAuth } = require("whatsapp-web.js");
   const client = new Client({
     authStrategy: new LocalAuth({
@@ -60,6 +93,7 @@ async function main() {
     }),
     puppeteer: {
       headless: true,
+      executablePath: browserPath,
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
     },
   });

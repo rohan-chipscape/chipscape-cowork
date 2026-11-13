@@ -109,8 +109,8 @@ export function WhatsAppConnect({ onConnected }: { onConnected?: () => void }) {
                   Download companion app
                 </a>
                 <p className="text-xs text-neutral-500">
-                  Unzip it, open a terminal there, and run the one setup command in its README. Leave it running
-                  whenever you want WhatsApp access here — a QR code will appear in its window to scan.
+                  Unzip it, then double-click &quot;Start WhatsApp Companion.command&quot;. Leave it running whenever
+                  you want WhatsApp access here — a QR code will appear in its window to scan.
                 </p>
               </>
             ) : (
