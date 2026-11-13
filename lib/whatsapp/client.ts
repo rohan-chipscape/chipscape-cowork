@@ -152,11 +152,18 @@ function resolveName(session: Session, chat: ChatRecord): string {
   if (direct) return direct;
   if (chat.id.endsWith("@lid")) {
     const phone = lidToPhoneNumber(session.email, chat.id);
-    const name = phone ? session.phoneNames.get(phone) : undefined;
-    if (name) {
-      session.names.set(chat.id, name);
-      chat.name = name;
-      return name;
+    if (phone) {
+      const name = session.phoneNames.get(phone);
+      if (name) {
+        session.names.set(chat.id, name);
+        chat.name = name;
+        return name;
+      }
+      // No saved contact name and no self-set display name either — show
+      // the actual phone number rather than WhatsApp's internal numeric id,
+      // which means nothing to a person (same as what WhatsApp itself shows
+      // for an unsaved, unnamed number).
+      return `+${phone}`;
     }
   }
   return chat.id;
