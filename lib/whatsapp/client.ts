@@ -29,6 +29,13 @@ type Session = {
   qrDataUrl: string | null;
   error: string | null;
   chats: Map<string, ChatRecord>;
+  // Chat history often arrives with no usable name (especially for newer
+  // "@lid" contact ids and groups) — contact push-names and group subjects
+  // arrive separately, sometimes before the chat record even exists, so
+  // this is tracked independently and consulted whenever a chat's own name
+  // is still missing.
+  names: Map<string, string>;
+  groupMetadataRequested: Set<string>;
 };
 
 // One real WhatsApp connection per account, kept alive for the life of this
@@ -60,14 +67,23 @@ function extractBody(message: Record<string, unknown> | null | undefined): strin
   return "[media]";
 }
 
+function resolveName(session: Session, chat: ChatRecord): string {
+  return chat.name || session.names.get(chat.id) || chat.id;
+}
+
 function upsertMessage(session: Session, m: Record<string, unknown>) {
   const key = m.key as { remoteJid?: string; fromMe?: boolean; participant?: string } | undefined;
   const jid = key?.remoteJid;
   if (!jid) return;
   let chat = session.chats.get(jid);
   if (!chat) {
-    chat = { id: jid, name: null, isGroup: jid.endsWith("@g.us"), unreadCount: 0, lastMessage: null, messages: [] };
+    chat = { id: jid, name: session.names.get(jid) || null, isGroup: jid.endsWith("@g.us"), unreadCount: 0, lastMessage: null, messages: [] };
     session.chats.set(jid, chat);
+  }
+  const pushName = m.pushName as string | undefined;
+  if (pushName && !key?.fromMe && !session.names.has(jid)) {
+    session.names.set(jid, pushName);
+    if (!chat.name) chat.name = pushName;
   }
   const body = extractBody(m.message as Record<string, unknown> | undefined);
   const timestamp = Number(m.messageTimestamp) || Math.floor(Date.now() / 1000);
@@ -94,7 +110,15 @@ export async function startSession(email: string): Promise<void> {
     path.join(SESSIONS_DIR, sanitizeClientId(email))
   );
 
-  const session: Session = { sock: null, state: "idle", qrDataUrl: null, error: null, chats: new Map() };
+  const session: Session = {
+    sock: null,
+    state: "idle",
+    qrDataUrl: null,
+    error: null,
+    chats: new Map(),
+    names: new Map(),
+    groupMetadataRequested: new Set(),
+  };
   sessions.set(email, session);
 
   const sock = makeWASocket({ auth: authState, printQRInTerminal: false, syncFullHistory: true });
@@ -124,13 +148,29 @@ export async function startSession(email: string): Promise<void> {
     }
   });
 
+  function rememberName(jid: string, name: string | undefined | null) {
+    if (!name) return;
+    session.names.set(jid, name);
+    const chat = session.chats.get(jid);
+    if (chat && !chat.name) chat.name = name;
+  }
+
+  function ensureGroupName(jid: string) {
+    if (!jid.endsWith("@g.us") || session.groupMetadataRequested.has(jid)) return;
+    session.groupMetadataRequested.add(jid);
+    (sock as { groupMetadata: (jid: string) => Promise<{ subject?: string }> })
+      .groupMetadata(jid)
+      .then((meta) => rememberName(jid, meta?.subject))
+      .catch(() => {});
+  }
+
   sock.ev.on("messaging-history.set", (data: Record<string, unknown>) => {
     const chats = (data.chats as Array<{ id: string; name?: string; unreadCount?: number }>) || [];
     const messages = (data.messages as Array<Record<string, unknown>>) || [];
     for (const c of chats) {
       const existing = session.chats.get(c.id) ?? {
         id: c.id,
-        name: null,
+        name: session.names.get(c.id) || null,
         isGroup: c.id.endsWith("@g.us"),
         unreadCount: 0,
         lastMessage: null,
@@ -139,20 +179,28 @@ export async function startSession(email: string): Promise<void> {
       existing.name = c.name || existing.name;
       existing.unreadCount = c.unreadCount ?? existing.unreadCount;
       session.chats.set(c.id, existing);
+      if (!existing.name) ensureGroupName(c.id);
     }
     for (const m of messages) upsertMessage(session, m);
   });
 
-  sock.ev.on("contacts.upsert", (contacts: Array<{ id: string; name?: string; notify?: string }>) => {
+  sock.ev.on("contacts.upsert", (contacts: Array<{ id: string; name?: string; notify?: string; verifiedName?: string }>) => {
     for (const c of contacts) {
-      const existing = session.chats.get(c.id);
-      if (existing && !existing.name) existing.name = c.name || c.notify || existing.name;
+      rememberName(c.id, c.name || c.verifiedName || c.notify);
     }
+  });
+
+  sock.ev.on("groups.upsert", (groups: Array<{ id: string; subject?: string }>) => {
+    for (const g of groups) rememberName(g.id, g.subject);
   });
 
   sock.ev.on("messages.upsert", (data: Record<string, unknown>) => {
     const messages = (data.messages as Array<Record<string, unknown>>) || [];
-    for (const m of messages) upsertMessage(session, m);
+    for (const m of messages) {
+      upsertMessage(session, m);
+      const jid = (m.key as { remoteJid?: string } | undefined)?.remoteJid;
+      if (jid) ensureGroupName(jid);
+    }
   });
 }
 
@@ -166,7 +214,7 @@ async function getReadySession(email: string): Promise<Session> {
 
 function findChat(session: Session, chatQuery: string): ChatRecord | undefined {
   const query = chatQuery.toLowerCase();
-  return Array.from(session.chats.values()).find((c) => c.name?.toLowerCase().includes(query));
+  return Array.from(session.chats.values()).find((c) => resolveName(session, c).toLowerCase().includes(query));
 }
 
 export async function listChats(email: string, limit = 20) {
@@ -176,7 +224,7 @@ export async function listChats(email: string, limit = 20) {
     .slice(0, limit)
     .map((c) => ({
       id: c.id,
-      name: c.name || c.id,
+      name: resolveName(session, c),
       isGroup: c.isGroup,
       unreadCount: c.unreadCount,
       lastMessage: c.lastMessage,
@@ -187,7 +235,7 @@ export async function readMessages(email: string, chatQuery: string, limit = 20)
   const session = await getReadySession(email);
   const chat = findChat(session, chatQuery);
   if (!chat) return { error: `No WhatsApp chat found matching "${chatQuery}".` };
-  return { chatName: chat.name || chat.id, messages: chat.messages.slice(-limit) };
+  return { chatName: resolveName(session, chat), messages: chat.messages.slice(-limit) };
 }
 
 export async function sendMessage(email: string, chatQuery: string, text: string) {
@@ -198,5 +246,5 @@ export async function sendMessage(email: string, chatQuery: string, text: string
     chat.id,
     { text }
   );
-  return { sent: true, chatName: chat.name || chat.id };
+  return { sent: true, chatName: resolveName(session, chat) };
 }
