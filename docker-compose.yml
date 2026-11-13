@@ -8,6 +8,13 @@ services:
       - .env.local
     volumes:
       - cowork-data:/app/.data # persists the Google OAuth token across restarts
+    sysctls:
+      # This host has no working IPv6 route, but web.whatsapp.com resolves to
+      # an IPv6 address first — Chromium (lib/whatsapp/client.ts) tried that
+      # route, got nowhere, and WhatsApp's pairing socket never connected,
+      # leaving the QR rendered but dead. Force IPv4 so it uses the route
+      # that actually works.
+      - net.ipv6.conf.all.disable_ipv6=1
 
 volumes:
   cowork-data:
