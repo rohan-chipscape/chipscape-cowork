@@ -13,7 +13,16 @@ import QRCode from "qrcode";
 
 type ConnectionState = "idle" | "qr" | "ready" | "auth_failure" | "disconnected";
 
-type StoredMessage = { fromMe: boolean; author: string | null; body: string; timestamp: number };
+type StoredMessage = {
+  fromMe: boolean;
+  author: string | null;
+  body: string;
+  timestamp: number;
+  // Only used internally as an anchor for fetchMessageHistory (requesting
+  // older messages on demand) — never returned from the public functions
+  // below.
+  key: { id: string; remoteJid: string; fromMe: boolean } | null;
+};
 
 type ChatRecord = {
   id: string;
@@ -170,7 +179,7 @@ function resolveName(session: Session, chat: ChatRecord): string {
 }
 
 function upsertMessage(session: Session, m: Record<string, unknown>) {
-  const key = m.key as { remoteJid?: string; fromMe?: boolean; participant?: string } | undefined;
+  const key = m.key as { id?: string; remoteJid?: string; fromMe?: boolean; participant?: string } | undefined;
   const jid = key?.remoteJid;
   if (!jid) return;
   let chat = session.chats.get(jid);
@@ -190,9 +199,17 @@ function upsertMessage(session: Session, m: Record<string, unknown>) {
     author: key?.participant || (key?.fromMe ? "me" : jid),
     body,
     timestamp,
+    key: key?.id ? { id: key.id, remoteJid: jid, fromMe: !!key.fromMe } : null,
   };
-  chat.messages.push(entry);
-  if (chat.messages.length > 200) chat.messages.shift();
+  // Older messages fetched on demand (see fetchOlderMessages) arrive via
+  // this same event, out of order relative to what's already stored — keep
+  // the list sorted so "oldest message" (used as the next fetch anchor)
+  // and the public slice(-limit) in readMessages stay correct.
+  if (!chat.messages.some((existing) => existing.key?.id === entry.key?.id && entry.key)) {
+    chat.messages.push(entry);
+    chat.messages.sort((a, b) => a.timestamp - b.timestamp);
+  }
+  if (chat.messages.length > 500) chat.messages.splice(0, chat.messages.length - 500);
   chat.lastMessage = { body, fromMe: entry.fromMe, timestamp };
 }
 
@@ -342,11 +359,39 @@ export async function listChats(email: string, limit = 20) {
     }));
 }
 
+// WhatsApp only proactively pushes a bounded set of recent chats/messages
+// to a newly linked device (the same limit real WhatsApp Web has — older
+// history isn't synced upfront, only loaded as you ask for it). This asks
+// the phone directly for more history in one specific chat, anchored at
+// the oldest message already known for it.
+async function fetchOlderMessages(session: Session, chat: ChatRecord, count: number): Promise<void> {
+  const oldest = chat.messages[0];
+  if (!oldest?.key) return; // nothing to anchor the request to
+  const sock = session.sock as {
+    fetchMessageHistory: (count: number, oldestMsgKey: unknown, oldestMsgTimestamp: number) => Promise<string>;
+  };
+  try {
+    await sock.fetchMessageHistory(count, oldest.key, oldest.timestamp);
+    // The response arrives asynchronously via the same messaging-history.set
+    // listener already wired up in startSession() — give it a few seconds.
+    await new Promise((resolve) => setTimeout(resolve, 6000));
+  } catch {
+    // Best-effort — if the phone's offline or the request fails, callers
+    // still get whatever was already cached.
+  }
+}
+
 export async function readMessages(email: string, chatQuery: string, limit = 20) {
   const session = await getReadySession(email);
   const chat = findChat(session, chatQuery);
   if (!chat) return { error: `No WhatsApp chat found matching "${chatQuery}".` };
-  return { chatName: resolveName(session, chat), messages: chat.messages.slice(-limit) };
+  if (chat.messages.length < limit) {
+    await fetchOlderMessages(session, chat, limit - chat.messages.length);
+  }
+  return {
+    chatName: resolveName(session, chat),
+    messages: chat.messages.slice(-limit).map(({ fromMe, author, body, timestamp }) => ({ fromMe, author, body, timestamp })),
+  };
 }
 
 export async function sendMessage(email: string, chatQuery: string, text: string) {
