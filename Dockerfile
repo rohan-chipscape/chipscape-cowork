@@ -28,6 +28,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends chromium \
     && rm -rf /var/lib/apt/lists/*
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
+# adduser --system gives this user HOME=/nonexistent, which doesn't exist —
+# Chromium's crashpad handler computes its crash-database path from $HOME,
+# so with no real $HOME it refuses to start at all with
+# "chrome_crashpad_handler: --database is required", even with
+# --disable-crash-reporter passed as a launch arg. Give it a real, writable
+# HOME.
+ENV HOME=/home/nextjs
+RUN mkdir -p /home/nextjs && chown nextjs:nodejs /home/nextjs
+
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
