@@ -15,6 +15,11 @@ export function proxy(req: NextRequest) {
     // Drive "anyone with the link" share) so they work from a system browser
     // or another device without a session cookie.
     pathname.startsWith("/api/files/download/") ||
+    // The WhatsApp companion app running on the account owner's own computer
+    // isn't a browser with our session cookie — it authenticates itself with
+    // an email+password body on every call instead (checked inside each of
+    // these route handlers, same credential as /api/login).
+    pathname.startsWith("/api/whatsapp/companion/") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/icons/") ||
     pathname === "/favicon.ico" ||

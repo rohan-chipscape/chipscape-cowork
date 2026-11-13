@@ -28,7 +28,9 @@ export function WhatsAppConnect({ onConnected }: { onConnected?: () => void }) {
 
   async function startConnect() {
     setOpen(true);
-    await fetch("/api/whatsapp/connect", { method: "POST" }).catch(() => {});
+    // No server-side "connect" call anymore — the companion app running on
+    // this account's own computer connects to WhatsApp on its own and pushes
+    // its state here; we just poll for whatever it reports.
     stopPolling();
     pollRef.current = setInterval(async () => {
       try {
@@ -94,10 +96,27 @@ export function WhatsAppConnect({ onConnected }: { onConnected?: () => void }) {
                   Try again
                 </button>
               </>
+            ) : status?.state === "disconnected" || status?.state === "idle" ? (
+              <>
+                <p className="text-sm text-neutral-300">
+                  WhatsApp runs through a small companion app on your own computer — not this server — so WhatsApp
+                  trusts the connection the same way it trusts your phone.
+                </p>
+                <a
+                  href="/whatsapp-companion.zip"
+                  className="rounded-lg bg-[#2c67c5] px-4 py-2 text-sm font-medium text-white hover:bg-[#245499]"
+                >
+                  Download companion app
+                </a>
+                <p className="text-xs text-neutral-500">
+                  Unzip it, open a terminal there, and run the one setup command in its README. Leave it running
+                  whenever you want WhatsApp access here — a QR code will appear in its window to scan.
+                </p>
+              </>
             ) : (
               <>
                 <div className="h-6 w-6 animate-spin rounded-full border-2 border-neutral-600 border-t-white" />
-                <p className="text-sm text-neutral-400">Starting WhatsApp…</p>
+                <p className="text-sm text-neutral-400">Checking for the companion app…</p>
               </>
             )}
             <button
