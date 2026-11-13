@@ -29,6 +29,7 @@ type Session = {
   state: ConnectionState;
   qrDataUrl: string | null;
   error: string | null;
+  email: string;
   chats: Map<string, ChatRecord>;
   // Chat history often arrives with no usable name (especially for newer
   // "@lid" contact ids and groups) — contact push-names and group subjects
@@ -36,6 +37,12 @@ type Session = {
   // this is tracked independently and consulted whenever a chat's own name
   // is still missing.
   names: Map<string, string>;
+  // WhatsApp's newer privacy-preserving "@lid" contact ids are a different
+  // identifier namespace from the phone-number-based "@s.whatsapp.net" jid
+  // that actually carries a contact's name — this maps phone number ->
+  // name, resolved against the lid-mapping files Baileys itself persists
+  // (see resolveLidName below) whenever a chat's own name is missing.
+  phoneNames: Map<string, string>;
   groupMetadataRequested: Set<string>;
 };
 
@@ -59,11 +66,28 @@ function cacheFile(email: string): string {
   return path.join(SESSIONS_DIR, sanitizeClientId(email), "chats-cache.json");
 }
 
+function phoneNamesFile(email: string): string {
+  return path.join(SESSIONS_DIR, sanitizeClientId(email), "phone-names-cache.json");
+}
+
 function loadChatsCache(email: string): Map<string, ChatRecord> {
   try {
     const raw = fs.readFileSync(cacheFile(email), "utf8");
     const entries = JSON.parse(raw) as [string, ChatRecord][];
     return new Map(entries);
+  } catch {
+    return new Map();
+  }
+}
+
+// contacts.upsert (the only source of real contact names for phone-number
+// jids) may not refire on a plain reconnect, only on a fresh pairing — so
+// without this, name resolution for "@lid" chats would work right after
+// connecting but silently go blank again after every restart.
+function loadPhoneNamesCache(email: string): Map<string, string> {
+  try {
+    const raw = fs.readFileSync(phoneNamesFile(email), "utf8");
+    return new Map(JSON.parse(raw) as [string, string][]);
   } catch {
     return new Map();
   }
@@ -76,6 +100,7 @@ function saveChatsCacheDebounced(session: Session, email: string) {
     try {
       fs.mkdirSync(path.dirname(cacheFile(email)), { recursive: true });
       fs.writeFileSync(cacheFile(email), JSON.stringify(Array.from(session.chats.entries())));
+      fs.writeFileSync(phoneNamesFile(email), JSON.stringify(Array.from(session.phoneNames.entries())));
     } catch {
       // best-effort cache — a failed write just means a slower rebuild
       // after the next restart, nothing user-facing breaks
@@ -102,8 +127,39 @@ function extractBody(message: Record<string, unknown> | null | undefined): strin
   return "[media]";
 }
 
+// Baileys writes one of these per contact it's ever resolved a LID for,
+// containing just the bare phone number as a JSON string — the only
+// reliable way to connect an "@lid" chat back to a real phone number
+// (and from there, a real contact name) when WhatsApp doesn't include
+// that mapping in the chat/message history itself.
+function lidToPhoneNumber(email: string, lidJid: string): string | null {
+  const num = lidJid.split("@")[0];
+  try {
+    const raw = fs.readFileSync(
+      path.join(SESSIONS_DIR, sanitizeClientId(email), `lid-mapping-${num}_reverse.json`),
+      "utf8"
+    );
+    const phone = JSON.parse(raw);
+    return typeof phone === "string" ? phone : null;
+  } catch {
+    return null;
+  }
+}
+
 function resolveName(session: Session, chat: ChatRecord): string {
-  return chat.name || session.names.get(chat.id) || chat.id;
+  if (chat.name) return chat.name;
+  const direct = session.names.get(chat.id);
+  if (direct) return direct;
+  if (chat.id.endsWith("@lid")) {
+    const phone = lidToPhoneNumber(session.email, chat.id);
+    const name = phone ? session.phoneNames.get(phone) : undefined;
+    if (name) {
+      session.names.set(chat.id, name);
+      chat.name = name;
+      return name;
+    }
+  }
+  return chat.id;
 }
 
 function upsertMessage(session: Session, m: Record<string, unknown>) {
@@ -150,8 +206,10 @@ export async function startSession(email: string): Promise<void> {
     state: "idle",
     qrDataUrl: null,
     error: null,
+    email,
     chats: loadChatsCache(email),
     names: new Map(),
+    phoneNames: loadPhoneNamesCache(email),
     groupMetadataRequested: new Set(),
   };
   sessions.set(email, session);
@@ -225,7 +283,11 @@ export async function startSession(email: string): Promise<void> {
 
   sock.ev.on("contacts.upsert", (contacts: Array<{ id: string; name?: string; notify?: string; verifiedName?: string }>) => {
     for (const c of contacts) {
-      rememberName(c.id, c.name || c.verifiedName || c.notify);
+      const name = c.name || c.verifiedName || c.notify;
+      rememberName(c.id, name);
+      if (name && c.id.endsWith("@s.whatsapp.net")) {
+        session.phoneNames.set(c.id.split("@")[0], name);
+      }
     }
     saveChatsCacheDebounced(session, email);
   });
