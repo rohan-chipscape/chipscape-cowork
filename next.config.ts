@@ -56,16 +56,13 @@ const nextConfig: NextConfig = {
     "heic-convert",
     "heic-decode",
     "libheif-js",
-    // whatsapp-web.js's unused RemoteAuth strategy pulls in "unzipper",
-    // which lazily requires "@aws-sdk/client-s3" inside a code path we
-    // never hit (we use LocalAuth) — Next's bundler still tries to
-    // statically resolve that require() at build time and fails since
-    // that package isn't installed. Treating the whole package as
-    // external skips bundling it, so this dead code path is never
-    // analyzed; Node's own require() only runs it if actually called.
-    "whatsapp-web.js",
-    "puppeteer",
-    "puppeteer-core",
+    // Baileys optionally uses "jimp" for image-message processing via a
+    // dynamic import().catch(() => {}) — genuinely optional at runtime
+    // (we don't handle media messages), but Next's bundler still tries to
+    // statically resolve it at build time and fails since it isn't
+    // installed. External skips that; Node's own import() only matters if
+    // the code path actually runs.
+    "@whiskeysockets/baileys",
   ],
   // Next's static file tracer can't follow any of the runtime-computed
   // require()s these packages do, so the standalone build's node_modules
