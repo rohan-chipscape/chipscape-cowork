@@ -5,6 +5,9 @@ FROM node:22-slim AS base
 # stage instead, which pulls in its actual runtime libraries via apt's own
 # dependency resolution rather than guessing which ones a slim base needs.
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+# The puppeteer version pulled in via whatsapp-web.js's GitHub main branch
+# renamed this env var — set both so the install script is skipped either way.
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 FROM base AS deps
 WORKDIR /app
