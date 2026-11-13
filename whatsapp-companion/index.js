@@ -92,16 +92,25 @@ async function main() {
       dataPath: path.join(__dirname, "session"),
     }),
     puppeteer: {
-      headless: true,
+      // Visible on purpose — same idea as ChatGPT's "computer use": you see
+      // an actual browser window and log into WhatsApp Web in it directly,
+      // instead of scanning a QR code printed in this terminal.
+      headless: false,
       executablePath: browserPath,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--window-size=480,760"],
+      defaultViewport: null,
     },
   });
 
   let ready = false;
 
   client.on("qr", async (qr) => {
-    console.log("\nScan this with WhatsApp on your phone (Settings → Linked Devices → Link a Device):\n");
+    console.log(
+      "\nA browser window just opened showing WhatsApp Web — log in there " +
+        "(Settings → Linked Devices → Link a Device on your phone, then scan).\n" +
+        "If you don't see it, check behind other windows or your Dock.\n"
+    );
+    // Also print it here as a fallback in case the window didn't appear.
     qrcodeTerminal.generate(qr, { small: true });
     try {
       const qrDataUrl = await QRCode.toDataURL(qr);

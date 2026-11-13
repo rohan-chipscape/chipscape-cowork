@@ -15,8 +15,10 @@ not a server sitting in a datacenter.
    - If it says Node.js isn't installed, it'll open the download page for
      you — install it, then double-click the file again.
 3. The first time, it'll ask for your Cowork email and password in the
-   window that opens, then show a QR code. Open WhatsApp on your phone →
-   Settings → Linked Devices → Link a Device, and scan it.
+   Terminal window, then open an actual browser window showing WhatsApp
+   Web. Open WhatsApp on your phone → Settings → Linked Devices → Link a
+   Device, and scan the code shown in that browser window — exactly like
+   logging into WhatsApp Web normally.
 
 ## Every time after that
 
