@@ -7,6 +7,7 @@
 // open, widely-reported bug in that library, not something fixable on our
 // end. Baileys doesn't depend on reverse-engineering WhatsApp Web's actual
 // frontend, so it isn't exposed to that whole class of breakage.
+import fs from "node:fs";
 import path from "node:path";
 import QRCode from "qrcode";
 
@@ -46,6 +47,40 @@ const SESSIONS_DIR = path.join(process.cwd(), ".data", "whatsapp-sessions");
 
 function sanitizeClientId(email: string): string {
   return email.replace(/[^a-zA-Z0-9]/g, "_");
+}
+
+// WhatsApp only sends a full chat/message history once, right when a
+// device is first linked — a plain reconnect using already-saved
+// credentials (every server restart) does NOT resend it, only new
+// real-time updates from that point on. Without caching it ourselves to
+// disk, every restart would silently wipe all known chats until new
+// messages happened to arrive.
+function cacheFile(email: string): string {
+  return path.join(SESSIONS_DIR, sanitizeClientId(email), "chats-cache.json");
+}
+
+function loadChatsCache(email: string): Map<string, ChatRecord> {
+  try {
+    const raw = fs.readFileSync(cacheFile(email), "utf8");
+    const entries = JSON.parse(raw) as [string, ChatRecord][];
+    return new Map(entries);
+  } catch {
+    return new Map();
+  }
+}
+
+let pendingSave: NodeJS.Timeout | null = null;
+function saveChatsCacheDebounced(session: Session, email: string) {
+  if (pendingSave) clearTimeout(pendingSave);
+  pendingSave = setTimeout(() => {
+    try {
+      fs.mkdirSync(path.dirname(cacheFile(email)), { recursive: true });
+      fs.writeFileSync(cacheFile(email), JSON.stringify(Array.from(session.chats.entries())));
+    } catch {
+      // best-effort cache — a failed write just means a slower rebuild
+      // after the next restart, nothing user-facing breaks
+    }
+  }, 2000);
 }
 
 export function getSessionStatus(email: string): { state: ConnectionState; qrDataUrl: string | null; error: string | null } {
@@ -115,7 +150,7 @@ export async function startSession(email: string): Promise<void> {
     state: "idle",
     qrDataUrl: null,
     error: null,
-    chats: new Map(),
+    chats: loadChatsCache(email),
     names: new Map(),
     groupMetadataRequested: new Set(),
   };
@@ -160,7 +195,10 @@ export async function startSession(email: string): Promise<void> {
     session.groupMetadataRequested.add(jid);
     (sock as { groupMetadata: (jid: string) => Promise<{ subject?: string }> })
       .groupMetadata(jid)
-      .then((meta) => rememberName(jid, meta?.subject))
+      .then((meta) => {
+        rememberName(jid, meta?.subject);
+        saveChatsCacheDebounced(session, email);
+      })
       .catch(() => {});
   }
 
@@ -182,16 +220,19 @@ export async function startSession(email: string): Promise<void> {
       if (!existing.name) ensureGroupName(c.id);
     }
     for (const m of messages) upsertMessage(session, m);
+    saveChatsCacheDebounced(session, email);
   });
 
   sock.ev.on("contacts.upsert", (contacts: Array<{ id: string; name?: string; notify?: string; verifiedName?: string }>) => {
     for (const c of contacts) {
       rememberName(c.id, c.name || c.verifiedName || c.notify);
     }
+    saveChatsCacheDebounced(session, email);
   });
 
   sock.ev.on("groups.upsert", (groups: Array<{ id: string; subject?: string }>) => {
     for (const g of groups) rememberName(g.id, g.subject);
+    saveChatsCacheDebounced(session, email);
   });
 
   sock.ev.on("messages.upsert", (data: Record<string, unknown>) => {
@@ -201,6 +242,7 @@ export async function startSession(email: string): Promise<void> {
       const jid = (m.key as { remoteJid?: string } | undefined)?.remoteJid;
       if (jid) ensureGroupName(jid);
     }
+    saveChatsCacheDebounced(session, email);
   });
 }
 
